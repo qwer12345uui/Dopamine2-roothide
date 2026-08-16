@@ -23,6 +23,9 @@ NS_ASSUME_NONNULL_BEGIN
 
     PSSpecifier *_customBootlogoEnabledSpecifier;
     PSSpecifier *_customBootlogoSpecifier;
+    PSSpecifier *_customWallpaperEnabledSpecifier;
+    PSSpecifier *_customWallpaperSpecifier;
+    BOOL _selectingCustomWallpaper;
 }
 
 @end

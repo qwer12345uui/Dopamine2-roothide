@@ -94,3 +94,22 @@ Boot Logo 设置界面继续提供参考图所示的 **Enabled**、**Custom Boot
 本轮自动验证新增 `lsd` 防重入、iOS 15 显式启用标记、单飞 gate、Boot Logo 原子写入及 2048 px 上限检查。仍须在 iPhone11,6 / iOS 15.0 上验证新装、覆盖更新、连续更新及手动刷新越狱应用。验收标准是每轮安装完成后 SpringBoard 在正常时限内恢复，且不再进入长时间旋转、Apple 标志或 Dopamine 的 Watchdog Timeout 安全模式。
 
 [5] [RootHide Dopamine2-roothide 2.4.9.25 发布说明](https://github.com/roothide/Dopamine2-roothide/releases/tag/25)
+
+## 追加调查三：首次打开 App、版本同步与自定义壁纸
+
+用户补充的现象将受影响范围扩展到三类相同的恢复边界：新安装 App 完成后、覆盖更新完成后，以及越狱后首次打开可移除应用时。前两类可由 LaunchServices 数据库重建和全量图标刷新重入解释；第三类进一步指向 `launchd` 在可移除 App 第一次 `posix_spawn` 前执行的同步工作。此前已经隔离安装服务和 iOS 15 自动 `uicache`，但 `fix__iosConnect()` 仍在 `launchd` 的首次 App 启动路径同步执行 `IOServiceOpen`。在 iOS 15 arm64e 的临界恢复期，任何 IOKit 连接延迟都会阻塞 pid 1 的启动分派，继而使 SpringBoard 触发看门狗。
+
+本轮确认 RootHide 官方公开 Release `25` 的名称为 `2.4.9.25`，其源分支仍保留旧的 `2.4.8.21` BaseBin 文件版本。因此本分支将构建元数据、Xcode 营销版本和 Release 版本统一为 `2.4.9.25`，以反映官方发布基线并避免 IPA 显示过期版本。[5]
+
+| 文件 | 修改 | 预期作用 |
+| --- | --- | --- |
+| `BaseBin/launchdhook/src/roothider.m` | 将首次第三方 App 启动中的 IOSurface 连接刷新调整为 iOS 15 arm64e 默认关闭、显式诊断标记 `jbroot:/basebin/.enable_iosurface_refresh_ios15` 才启用。 | 将可选 IOKit 刷新移出 launchd 的默认同步首启关键路径；不影响代码信任、正常注入、手动刷新越狱应用或 iOS 16+ 行为。 |
+| `BaseBin/launchdhook/src/roothider.m` | 对带 `_SafeMode` 或 `_MSSafeMode` 的可移除 App，跳过同步 `jbdSpinlockFixOnly` RPC。 | 用户已经明确禁用插件时，不再将新 App 暂停并等待 jailbreakd 的自旋锁远程补丁；正常注入进程仍保留 iOS 15 自旋锁缓解。 |
+| `BaseBin/_external/basebin/.version` 与 Xcode 主目标 | 统一为 `2.4.9.25`。 | 生成 IPA 的 `CFBundleShortVersionString` 与当前 RootHide 官方发布名称一致。 |
+| `DOUIManager`、`DONavigationController`、`DOSettingsController` | 新增 Custom Wallpaper 开关、图库选图、原子存储、通知刷新与主题图片回退。 | 自定义壁纸仅替换 Dopamine 应用内背景，不触碰系统主屏幕壁纸、iBoot 或用户空间重启核心路径。 |
+
+自定义壁纸复用 Boot Logo 已有的安全策略：图片选择后重新渲染以消除方向元数据，最长边限制为 2048 px，JPEG 以原子方式写入应用 Documents 目录。若没有选择有效图片或关闭开关，主界面无缝回退到当前主题背景；壁纸选择不会参与 `launchd`、dyld、安装服务或自旋锁补丁。
+
+> 自旋锁修复不能被整体关闭：上传的 kernel panic 与 iOS 15 arm64e dyld 共享缓存风险相符。此次修复仅将 **明确安全模式、无插件负载** 的 App 从同步远程补丁中排除，同时保留正常 RootHide 注入进程的原始 spinlock mitigation。
+
+本轮 IPA 回归脚本新增官方版本、IOSurface iOS 15 默认保护、安全模式 spinlock 降级和自定义壁纸通知/偏好键检查。最终设备验收应在 iPhone11,6 / iOS 15.0 上按顺序完成：越狱后首次打开普通 App、安装新 App、覆盖更新同一 App、连续两次更新、再手动“刷新越狱应用”。通过标准是每次操作后 SpringBoard 正常返回且不出现黑屏旋转、Apple 标志或 Dopamine `Watchdog Timeout`；若仍出现 `Spinlock` kernel panic，则需收集新 `.ips` 以区分正常注入进程中的 dyld 共享缓存问题与安装恢复链回归。

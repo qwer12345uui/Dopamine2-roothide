@@ -12,6 +12,8 @@
 #import "NSString+Version.h"
 #import <pthread.h>
 
+NSString * const DOWallpaperDidChangeNotification = @"DOWallpaperDidChangeNotification";
+
 @implementation DOUIManager
 
 + (instancetype)sharedInstance
@@ -28,6 +30,7 @@
 {
     if (self = [super init]){
         _bootlogoPath = [NSHomeDirectory() stringByAppendingPathComponent:@"Documents/bootlogo.png"];
+        _wallpaperPath = [NSHomeDirectory() stringByAppendingPathComponent:@"Documents/wallpaper.jpg"];
         _preferenceManager = [DOPreferenceManager sharedManager];
         _logRecord = [NSMutableArray new];
         _logLock = [NSLock new];

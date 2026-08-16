@@ -366,6 +366,22 @@
         [themeSpecifier setProperty:@"themeNames" forKey:@"titlesDataSource"];
         [specifiers addObject:themeSpecifier];
 
+        _customWallpaperEnabledSpecifier = [PSSpecifier preferenceSpecifierNamed:DOLocalizedString(@"Custom_Wallpaper") target:self set:@selector(setCustomWallpaperEnabled:specifier:) get:defGetter detail:nil cell:PSSwitchCell edit:nil];
+        [_customWallpaperEnabledSpecifier setProperty:@YES forKey:@"enabled"];
+        [_customWallpaperEnabledSpecifier setProperty:@"customWallpaperEnabled" forKey:@"key"];
+        [_customWallpaperEnabledSpecifier setProperty:@NO forKey:@"default"];
+        _customWallpaperEnabledSpecifier.identifier = @"customWallpaperEnabled";
+        [specifiers addObject:_customWallpaperEnabledSpecifier];
+
+        _customWallpaperSpecifier = [PSSpecifier preferenceSpecifierNamed:DOLocalizedString(@"Select_Wallpaper") target:self set:defSetter get:defGetter detail:nil cell:PSButtonCell edit:nil];
+        _customWallpaperSpecifier.buttonAction = @selector(selectCustomWallpaperPressed);
+        [_customWallpaperSpecifier setProperty:@YES forKey:@"enabled"];
+        [_customWallpaperSpecifier setProperty:@"customWallpaper" forKey:@"key"];
+        _customWallpaperSpecifier.identifier = @"customWallpaper";
+        if ([[DOPreferenceManager sharedManager] boolPreferenceValueForKey:@"customWallpaperEnabled" fallback:NO]) {
+            [specifiers addObject:_customWallpaperSpecifier];
+        }
+
         PSSpecifier *bootlogoGropSpecifier = [PSSpecifier emptyGroupSpecifier];
         bootlogoGropSpecifier.name = DOLocalizedString(@"Section_Boot_Logo");
         [specifiers addObject:bootlogoGropSpecifier];
@@ -548,6 +564,23 @@
     }
 }
 
+- (void)setCustomWallpaperEnabled:(id)value specifier:(PSSpecifier *)specifier
+{
+    bool prevValueBool = ((NSNumber *)[self readPreferenceValue:specifier]).boolValue;
+    [self setPreferenceValue:value specifier:specifier];
+    bool valueBool = ((NSNumber *)value).boolValue;
+
+    if (prevValueBool != valueBool) {
+        if (valueBool) {
+            [self insertSpecifier:_customWallpaperSpecifier afterSpecifier:specifier animated:YES];
+        }
+        else {
+            [self removeSpecifier:_customWallpaperSpecifier animated:YES];
+        }
+    }
+    [[NSNotificationCenter defaultCenter] postNotificationName:DOWallpaperDidChangeNotification object:nil];
+}
+
 - (void)setCustomBootlogoEnabled:(id)value specifier:(PSSpecifier *)specifier
 {
     bool prevValueBool = ((NSNumber *)[self readPreferenceValue:specifier]).boolValue;
@@ -570,17 +603,28 @@
     }
 }
 
+- (void)selectCustomWallpaperPressed
+{
+    _selectingCustomWallpaper = YES;
+    [self selectCustomBootlogoPressed];
+}
+
 - (void)selectCustomBootlogoPressed
 {
     PHAuthorizationStatus status = [PHPhotoLibrary authorizationStatus];
     if (status == PHAuthorizationStatusDenied || status == PHAuthorizationStatusRestricted) {
+        _selectingCustomWallpaper = NO;
         return;
-    } else if (status == PHAuthorizationStatusNotDetermined) {
-        [PHPhotoLibrary requestAuthorization:^(PHAuthorizationStatus status) {
-            if (status == PHAuthorizationStatusAuthorized) {
+    }
+    else if (status == PHAuthorizationStatusNotDetermined) {
+        [PHPhotoLibrary requestAuthorization:^(PHAuthorizationStatus requestedStatus) {
+            if (requestedStatus == PHAuthorizationStatusAuthorized || requestedStatus == PHAuthorizationStatusLimited) {
                 dispatch_async(dispatch_get_main_queue(), ^{
                     [self selectCustomBootlogoPressed];
                 });
+            }
+            else {
+                self->_selectingCustomWallpaper = NO;
             }
         }];
         return;
@@ -600,6 +644,7 @@
         chosenImage = info[UIImagePickerControllerOriginalImage];
     }
     if (!chosenImage || chosenImage.size.width <= 0 || chosenImage.size.height <= 0) {
+        _selectingCustomWallpaper = NO;
         [picker dismissViewControllerAnimated:YES completion:nil];
         return;
     }
@@ -620,6 +665,16 @@
     chosenImage = UIGraphicsGetImageFromCurrentImageContext();
     UIGraphicsEndImageContext();
 
+    if (_selectingCustomWallpaper) {
+        NSData *wallpaperData = UIImageJPEGRepresentation(chosenImage, 0.88);
+        _selectingCustomWallpaper = NO;
+        if (wallpaperData.length > 0 && [wallpaperData writeToFile:[DOUIManager sharedInstance].wallpaperPath atomically:YES]) {
+            [[NSNotificationCenter defaultCenter] postNotificationName:DOWallpaperDidChangeNotification object:nil];
+        }
+        [picker dismissViewControllerAnimated:YES completion:nil];
+        return;
+    }
+
     NSData *pngData = UIImagePNGRepresentation(chosenImage);
     if (pngData.length > 0) {
         [pngData writeToFile:[DOUIManager sharedInstance].bootlogoPath atomically:YES];
@@ -635,6 +690,7 @@
 }
 
 - (void)imagePickerControllerDidCancel:(UIImagePickerController *)picker {
+    _selectingCustomWallpaper = NO;
     [picker dismissViewControllerAnimated:YES completion:nil];
 }
 

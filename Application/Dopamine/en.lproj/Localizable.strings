@@ -65,6 +65,8 @@
 "Enabled" = "Enabled";
 "Custom_Boot_Logo" = "Custom Boot Logo";
 "Select_Image" = "Select Image";
+"Custom_Wallpaper" = "Custom Wallpaper";
+"Select_Wallpaper" = "Select Wallpaper";
 
 // Settings Alerts
 "Alert_Tweak_Injection_Toggled_Title" = "Userspace Reboot Required";

@@ -84,6 +84,12 @@ grep -Fq '.enable_auto_uicache_ios15' BaseBin/roothidehooks/lsd.x
 grep -Fq 'static dispatch_once_t autoUICacheOnce' BaseBin/roothidehooks/lsd.x
 grep -Fq 'NSDataWritingAtomic' Application/Dopamine/Jailbreak/DOEnvironmentManager.m
 grep -Fq 'maxBootLogoDimension = 2048.0' Application/Dopamine/UI/Settings/DOSettingsController.m
+grep -Fqx '2.4.9.25' BaseBin/_external/basebin/.version
+grep -Fq 'MARKETING_VERSION = 2.4.9.25;' Application/Dopamine.xcodeproj/project.pbxproj
+grep -Fq '.enable_iosurface_refresh_ios15' BaseBin/launchdhook/src/roothider.m
+grep -Fq 'roothideBlacklisted || choicyBlocked || !dyld_patch_enabled() || !iOS15Arm64e' BaseBin/launchdhook/src/roothider.m
+grep -Fq 'DOWallpaperDidChangeNotification' Application/Dopamine/UI/DOUIManager.m
+grep -Fq 'customWallpaperEnabled' Application/Dopamine/UI/Settings/DOSettingsController.m
 grep -Fq 'memchr(inputStruct' BaseBin/watchdoghook/src/main.m
 
 printf 'validated artifact=%s bundle_id=%s version=%s\n' "$artifact" "$bundle_id" "$short_version"

@@ -10,6 +10,8 @@
 #import "DOModalBackAction.h"
 #import "DOGlobalAppearance.h"
 #import "DOThemeManager.h"
+#import "DOUIManager.h"
+#import "DOPreferenceManager.h"
 
 @interface DONavigationController ()
 
@@ -27,6 +29,7 @@
 
 - (void)viewDidLoad
 {
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(customWallpaperDidChange:) name:DOWallpaperDidChangeNotification object:nil];
     [self setupBackground];
     [super viewDidLoad];
     [self setNavigationBarHidden:YES];
@@ -35,13 +38,29 @@
     [self setOverrideUserInterfaceStyle:UIUserInterfaceStyleDark];
 }
 
+- (UIImage *)resolvedBackgroundImage
+{
+    if ([[DOPreferenceManager sharedManager] boolPreferenceValueForKey:@"customWallpaperEnabled" fallback:NO]) {
+        UIImage *wallpaper = [UIImage imageWithContentsOfFile:[DOUIManager sharedInstance].wallpaperPath];
+        if (wallpaper) {
+            return wallpaper;
+        }
+    }
+    return [[[DOThemeManager sharedInstance] enabledTheme] image];
+}
+
+- (void)customWallpaperDidChange:(NSNotification *)notification
+{
+    dispatch_async(dispatch_get_main_queue(), ^{
+        self.backgroundImageView.image = [self resolvedBackgroundImage];
+    });
+}
+
 - (void)setupBackground
 {
-    DOTheme *theme = [[DOThemeManager sharedInstance] enabledTheme];
-    
     self.view.backgroundColor = [UIColor blackColor];
     self.backgroundImageView = [[UIImageView alloc] init];
-    self.backgroundImageView.image = [theme image];
+    self.backgroundImageView.image = [self resolvedBackgroundImage];
     self.backgroundImageView.contentMode = UIViewContentModeScaleAspectFill;
     self.backgroundImageView.translatesAutoresizingMaskIntoConstraints = NO;
     self.backgroundImageView.userInteractionEnabled = NO;
@@ -70,6 +89,11 @@
         [self.backAction.topAnchor constraintEqualToAnchor:self.view.topAnchor],
         [self.backAction.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor],
     ]];
+}
+
+- (void)dealloc
+{
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
 }
 
 - (void)setBackgroundDimmed:(BOOL)dimmed

@@ -20,6 +20,7 @@ NS_ASSUME_NONNULL_BEGIN
 }
 
 @property (nonatomic, readonly) NSString *bootlogoPath;
+@property (nonatomic, readonly) NSString *wallpaperPath;
 @property (nonatomic, retain) NSObject<DOLogViewProtocol> *logView;
 @property (atomic, retain) NSMutableArray<NSString*> *logRecord;
 
@@ -49,6 +50,7 @@ NS_ASSUME_NONNULL_BEGIN
 
 @end
 
+FOUNDATION_EXPORT NSString * const DOWallpaperDidChangeNotification;
 NSString *DOLocalizedString(NSString *string);
 
 NS_ASSUME_NONNULL_END

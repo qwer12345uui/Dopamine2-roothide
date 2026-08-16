@@ -327,6 +327,26 @@ int roothide_launchd___posix_spawn__spinlock_fix_only(pid_t *restrict pidp, cons
 	return ret;
 }
 
+/*
+ * This refresh was added as an optional UI workaround. It executes synchronously
+ * in launchd immediately before the first App Store-style process starts. On
+ * iOS 15 arm64e the IOServiceOpen path can block long enough for SpringBoard's
+ * watchdog to restart userspace. Keep the workaround available for diagnosis,
+ * but make it explicit opt-in on the affected platform; it is not required for
+ * code signing, dyld patching, or the manual jailbreak-app refresh operation.
+ */
+static bool shouldRefreshIOSurfaceConnectionForAppLaunch(void)
+{
+#ifdef __arm64e__
+	if (@available(iOS 16.0, *)) {
+		return true;
+	}
+	return access(JBROOT_PATH("/basebin/.enable_iosurface_refresh_ios15"), F_OK) == 0;
+#else
+	return true;
+#endif
+}
+
 int roothide_launchd___posix_spawn_prehook(pid_t *restrict pidp, const char *restrict path, struct _posix_spawn_args_desc *desc, char *const argv[restrict], char *const envp[restrict])
 {
 	if(!desc || !desc->attrp) {
@@ -342,7 +362,7 @@ int roothide_launchd___posix_spawn_prehook(pid_t *restrict pidp, const char *res
 		return __posix_spawn_hook(pidp, path, desc, argv, envp);
 	}
 
-	if(isRemovableBundlePath(path)) {
+	if(isRemovableBundlePath(path) && shouldRefreshIOSurfaceConnectionForAppLaunch()) {
 		static dispatch_once_t onceToken = {0};
 		dispatch_once(&onceToken, ^{
 			fix__iosConnect();
@@ -428,7 +448,15 @@ int roothide_launchd___posix_spawn_prehook(pid_t *restrict pidp, const char *res
 	
 			volatile pid_t* blacklistedPidp = allocBlacklistProcessId();
 	
-			if(roothideBlacklisted || !dyld_patch_enabled() || !iOS15Arm64e) {
+			/*
+			 * A Choicy/MobileSubstrate safe-mode launch has no tweak payload to
+			 * protect. Running the synchronous spinlock-only RPC here still
+			 * suspends the newly installed App while launchd waits for jailbreakd;
+			 * on iOS 15 arm64e that wait is a watchdog risk. Keep the spinlock
+			 * mitigation for normal injected processes, but fail open for the
+			 * explicitly non-injected safe-mode App path.
+			 */
+			if(roothideBlacklisted || choicyBlocked || !dyld_patch_enabled() || !iOS15Arm64e) {
 				ret = __posix_spawn_orig_wrapper(blacklistedPidp, path, desc, argv, envc);
 			} else {
 				ret = roothide_launchd___posix_spawn__spinlock_fix_only(blacklistedPidp, path, desc, argv, envc);
