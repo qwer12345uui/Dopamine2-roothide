@@ -1,11 +1,26 @@
-name: "*** build tipa file ***"
+name: Build and verify roothide Dopamine IPA
 
 on:
-  # schedule:
-  #   - cron: '0 */2 * * *' # every 2 hours
   workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish the verified artifact as a GitHub release
+        required: false
+        default: false
+        type: boolean
+      release_tag:
+        description: Release tag for manual publishing (required when publish is true)
+        required: false
+        type: string
   pull_request:
   push:
+    branches:
+      - 2.x
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -13,75 +28,140 @@ concurrency:
 
 jobs:
   build:
+    name: Build and verify .tipa
     runs-on: macos-14
+    timeout-minutes: 90
+    outputs:
+      artifact_name: ${{ steps.package.outputs.artifact_name }}
+      version: ${{ steps.package.outputs.version }}
     steps:
-      - name: Checkout
-        run: |
-          set -x
-          git clone --recursive https://github.com/roothide/Dopamine2-roothide ${{ github.workspace }}
-          
-      - name: Install Procursus
+      - name: Checkout this revision and submodules
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Restore Theos, SDK and trustcache cache
+        id: toolchain-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            theos
+            ci-cache/trustcache
+          key: macos-14-roothide-toolchain-v2-${{ hashFiles('.gitmodules', 'BaseBin/Makefile', 'BaseBin/**/Makefile', '.github/workflows/roothide.yml') }}
+          restore-keys: |
+            macos-14-roothide-toolchain-v2-
+
+      - name: Install Procursus build dependencies
         uses: dhinakg/procursus-action@main
         with:
           packages: ldid findutils sed coreutils make
 
-      - name: Install THEOS
-        run: |
-          set -x
-          export BASEDIR="$(pwd)"
-          export THEOS="${BASEDIR}/theos"
-          mkdir -p $THEOS
-          curl -fsSL https://raw.githubusercontent.com/roothide/theos/master/bin/install-theos >> install-theos.sh
-          gsed -E "/^\s*get_theos\s*$/,+1 s/^(\s*)(get_sdks)\s*$/\1mkdir -p \${THEOS}\/sdks\n\1touch \${THEOS}\/sdks\/sdk\n\1\2/g" -i install-theos.sh
-          bash install-theos.sh
-          curl -L https://github.com/theos/sdks/releases/latest/download/iPhoneOS16.5.sdk.tar.xz --output $THEOS/sdks/iPhoneOS16.5.sdk.tar.xz
-          gunzip $THEOS/sdks/iPhoneOS16.5.sdk.tar.xz
-          tar -xf $THEOS/sdks/iPhoneOS16.5.sdk.tar -C $THEOS/sdks
-          rm $THEOS/sdks/iPhoneOS16.5.sdk.tar
-          cd $BASEDIR
+      - name: Install macOS archive dependency
+        run: brew install libarchive
 
-      - name: Build and Install trustcache
+      - name: Prepare cached Theos SDK and trustcache
+        shell: bash
         run: |
-          set -x
-          git clone https://github.com/CRKatri/trustcache
-          cd trustcache
-          export CFLAGS="$CFLAGS -I$(brew --prefix openssl)/include -arch arm64"
-          export LDFLAGS="$LDFLAGS -L$(brew --prefix openssl)/lib -arch arm64"
-          gmake -j$(sysctl -n hw.physicalcpu) OPENSSL=1
-          sudo cp trustcache /opt/procursus/bin/
+          set -euo pipefail
+          export BASEDIR="$GITHUB_WORKSPACE"
+          export THEOS="$BASEDIR/theos"
+          mkdir -p "$THEOS" "$GITHUB_WORKSPACE/ci-cache"
 
-      - name: Set Environment Variables
+          if [[ ! -f "$THEOS/sdks/iPhoneOS16.5.sdk/SDKSettings.plist" ]]; then
+            rm -rf "$THEOS"
+            mkdir -p "$THEOS"
+            curl --fail --location --silent --show-error \
+              https://raw.githubusercontent.com/roothide/theos/master/bin/install-theos \
+              --output install-theos.sh
+            gsed -E "/^\s*get_theos\s*$/,+1 s/^(\s*)(get_sdks)\s*$/\1mkdir -p \${THEOS}\/sdks\n\1touch \${THEOS}\/sdks\/sdk\n\1\2/g" -i install-theos.sh
+            bash install-theos.sh
+            curl --fail --location --silent --show-error \
+              https://github.com/theos/sdks/releases/download/2023.05.09/iPhoneOS16.5.sdk.tar.xz \
+              --output "$THEOS/sdks/iPhoneOS16.5.sdk.tar.xz"
+            tar -xJf "$THEOS/sdks/iPhoneOS16.5.sdk.tar.xz" -C "$THEOS/sdks"
+            rm -f "$THEOS/sdks/iPhoneOS16.5.sdk.tar.xz"
+          fi
+
+          if [[ ! -x "$GITHUB_WORKSPACE/ci-cache/trustcache/trustcache" ]]; then
+            rm -rf "$GITHUB_WORKSPACE/ci-cache/trustcache"
+            git clone --depth=1 https://github.com/CRKatri/trustcache "$GITHUB_WORKSPACE/ci-cache/trustcache"
+            pushd "$GITHUB_WORKSPACE/ci-cache/trustcache"
+            export CFLAGS="${CFLAGS:-} -I$(brew --prefix openssl)/include -arch arm64"
+            export LDFLAGS="${LDFLAGS:-} -L$(brew --prefix openssl)/lib -arch arm64"
+            gmake -j"$(sysctl -n hw.physicalcpu)" OPENSSL=1
+            popd
+          fi
+          echo "$GITHUB_WORKSPACE/ci-cache/trustcache" >> "$GITHUB_PATH"
+
+      - name: Build package
+        id: package
+        shell: bash
         run: |
-          set -x
-          T2=$(TZ=UTC-2 date +'%Y%m%d_%H%M%S')
-          TS=$(date -j -f "%Y%m%d_%H%M%S" "${T2}" +%s)
-          SHASH=$(git rev-parse --short HEAD)
-          echo "ctime=${T2}" >> $GITHUB_ENV
-          echo "ctimestamp=${TS}" >> $GITHUB_ENV
-          echo "shorthash=${SHASH}" >> $GITHUB_ENV
+          set -euo pipefail
+          export BASEDIR="$GITHUB_WORKSPACE"
+          export THEOS="$BASEDIR/theos"
+          export PATH="$GITHUB_WORKSPACE/ci-cache/trustcache:$PATH"
 
-      - name: Install libarchive
-        run: |
-          brew install libarchive
+          item_count="$(plutil -extract items raw -expect array ./Application/Dopamine/UI/Settings/Credits.plist)"
+          for ((i = 0; i < item_count; i++)); do
+            if [[ "$(plutil -extract items."$i".headerCellClass raw ./Application/Dopamine/UI/Settings/Credits.plist)" == "DOCreditsCell" ]]; then
+              credits_index="$i"
+              break
+            fi
+          done
+          : "${credits_index:?Unable to locate the credits cell}"
+          plutil -insert "items.${credits_index}.names" -xml "<dict><key>name</key><string>${GITHUB_ACTOR}</string><key>link</key><string>https://github.com/${GITHUB_REPOSITORY}</string></dict>" -append ./Application/Dopamine/UI/Settings/Credits.plist
 
-      - name: Build
-        run: |
-          set -x
-          export BASEDIR="$(pwd)"
-          export THEOS="${BASEDIR}/theos"
-          typeset itemcount=$(plutil -extract items raw -expect array ./Application/Dopamine/UI/Settings/Credits.plist)
-          for ((i=0; i<$itemcount; i++)); do if [ "$(plutil -extract items.$i.headerCellClass raw ./Application/Dopamine/UI/Settings/Credits.plist)" = "DOCreditsCell" ]; then DOCreditsCellIndex=$i; break; fi; done;
-          plutil -insert items.$DOCreditsCellIndex.names -xml "<dict><key>name</key><string>${{ github.actor }}</string><key>link</key><string>https://github.com/${{ github.repository }}</string></dict>" -append ./Application/Dopamine/UI/Settings/Credits.plist
-          rm -rf $(xcrun --sdk iphoneos --show-sdk-path)/usr/include/xpc $(xcrun --sdk iphoneos --show-sdk-path)/usr/include/xpc.modulemap
-          gmake -j$(sysctl -n hw.physicalcpu)
-          VERSION=$(cat ./BaseBin/_external/basebin/.version)-$(git rev-parse --short HEAD)
-          mv ./Application/Dopamine.tipa  "./Application/roothide-Dopamine-${VERSION}.tipa"
-          echo "version=${VERSION}" >> $GITHUB_ENV
+          rm -rf "$(xcrun --sdk iphoneos --show-sdk-path)/usr/include/xpc" "$(xcrun --sdk iphoneos --show-sdk-path)/usr/include/xpc.modulemap"
+          gmake -j"$(sysctl -n hw.physicalcpu)"
 
-      - name: Upload Artifact
-        id: dopamine-latest-upload
+          version="$(cat ./BaseBin/_external/basebin/.version)-$(git rev-parse --short HEAD)"
+          artifact_name="roothide-Dopamine-${version}.tipa"
+          mv ./Application/Dopamine.tipa "./Application/${artifact_name}"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "artifact_name=${artifact_name}" >> "$GITHUB_OUTPUT"
+
+      - name: Validate archive and iOS 15 regression guards
+        shell: bash
+        run: bash ci/verify-ipa.sh "./Application/${{ steps.package.outputs.artifact_name }}"
+
+      - name: Upload verified artifact
         uses: actions/upload-artifact@v4
         with:
-          name: roothide-Dopamine-${{ env.version }}.tipa
-          path: |
-            ${{ github.workspace }}/Application/roothide-Dopamine-${{ env.version }}.tipa
+          name: ${{ steps.package.outputs.artifact_name }}
+          path: ./Application/${{ steps.package.outputs.artifact_name }}
+          if-no-files-found: error
+          retention-days: 30
+
+  release:
+    name: Publish verified artifact
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.publish)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Require a release tag for manual publishing
+        if: github.event_name == 'workflow_dispatch' && inputs.publish && inputs.release_tag == ''
+        run: |
+          echo 'release_tag is required when publish is true' >&2
+          exit 1
+
+      - name: Download verified artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.build.outputs.artifact_name }}
+          path: release
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          set -euo pipefail
+          gh release create "$TAG_NAME" release/*.tipa \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "roothide Dopamine ${VERSION}" \
+            --notes "Automated build and archive verification completed successfully for ${GITHUB_SHA}."

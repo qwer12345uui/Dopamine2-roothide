@@ -30,3 +30,16 @@ fork this repo then goto tab [Actions] -> [All Workflows] -> [build tip file] ->
 ***and you will get the contributor with your name on Credits***
 
 ![text](/.pictures/m7.png)
+
+## Verified Build and Release Workflow
+
+The `Build and verify roothide Dopamine IPA` workflow builds the revision checked out from this repository, including its pinned submodules. It restores the cached Theos SDK and trustcache toolchain when their build inputs are unchanged, then creates a `.tipa` artifact and validates both the archive structure and required iOS 15 safety regression guards.
+
+| Trigger | Result |
+| --- | --- |
+| Push or pull request on `2.x` | Builds and uploads a verified artifact retained for 30 days. |
+| Manual run without publishing | Builds and uploads a verified artifact only. |
+| Push of a `v*` tag | Builds, validates, uploads, and creates a GitHub Release. |
+| Manual run with `publish=true` and `release_tag` | Builds, validates, and creates a GitHub Release under the supplied tag. |
+
+The build artifact remains a `.tipa` file inside the downloaded workflow archive. The full investigation and verification boundary for the iOS 15 watchdog/spinlock work are recorded in [`docs/development-log-2026-08-16-ios15-watchdog.md`](docs/development-log-2026-08-16-ios15-watchdog.md).

@@ -2,6 +2,7 @@
 #include <dlfcn.h>
 #include <xpc/xpc.h>
 #include <IOKit/IOKitLib.h>
+#include <string.h>
 #include <libjailbreak/jbclient_xpc.h>
 
 #include <substrate.h>
@@ -27,14 +28,21 @@ kern_return_t IOServiceOpen_hook(io_service_t service, task_port_t owningTask, u
 
 kern_return_t IOConnectCallStructMethod_hook(mach_port_t connection, uint32_t selector, const void *inputStruct, size_t inputStructCnt, void *outputStruct, size_t *outputStructCnt)
 {
-	if (connection == gIOWatchdogConnection) {
-		if (selector == 2) {
-			int r = jbclient_watchdog_intercept_userspace_panic((const char *)inputStruct);
-			if (r == 0) {
-				reboot3(RB2_USERREBOOT);
-			}
-			return r;
+	if (connection == gIOWatchdogConnection && selector == 2) {
+		// Preserve the platform watchdog path when there is no complete panic
+		// message to persist. This hook must not reinterpret malformed IOKit data.
+		if (!inputStruct || inputStructCnt == 0 || !memchr(inputStruct, '\0', inputStructCnt)) {
+			return IOConnectCallStructMethod_orig(connection, selector, inputStruct, inputStructCnt, outputStruct, outputStructCnt);
 		}
+
+		int r = jbclient_watchdog_intercept_userspace_panic((const char *)inputStruct);
+		if (r == 0) {
+			reboot3(RB2_USERREBOOT);
+		}
+		if (r != 0) {
+			return IOConnectCallStructMethod_orig(connection, selector, inputStruct, inputStructCnt, outputStruct, outputStructCnt);
+		}
+		return r;
 	}
 	return IOConnectCallStructMethod_orig(connection, selector, inputStruct, inputStructCnt, outputStruct, outputStructCnt);
 }

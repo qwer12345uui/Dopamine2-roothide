@@ -434,6 +434,16 @@ int roothide_launchd___posix_spawn_prehook(pid_t *restrict pidp, const char *res
 		return ret;
 	}
 
+	// App installation and update services may prewarm a freshly replaced
+	// third-party executable. On iOS 15 arm64e, injecting that short-lived
+	// launch path can race dyld shared-cache setup and reproduce a spinlock
+	// panic. The real foreground launch still follows the normal hook path.
+	if (iOS15Arm64e && isRemovableBundlePath(path) &&
+		(envbuf_getenv(envp, "ActivePrewarm") || envbuf_getenv(envp, "DYLD_USE_CLOSURES"))) {
+		JBLogDebug("skip injection for iOS 15 app prewarm: %s", path);
+		return __posix_spawn_orig_wrapper(pidp, path, desc, argv, envp);
+	}
+
 	if(launchdhookFirstLoad) 
 	{
 		//we should not enable system-wide injection until the jailbreak is finalized (userspace reboot).
