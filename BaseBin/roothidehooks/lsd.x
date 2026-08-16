@@ -622,13 +622,14 @@ static BOOL shouldAutoUICacheAfterDatabaseRebuild(void)
 	if (access(jbroot("/.disable_auto_uicache"), F_OK) == 0) return NO;
 
 #ifdef __arm64e__
-	if (!__builtin_available(iOS 16.0, *)) {
-		// iOS 15 A12+ safety default. The in-app manual refresh remains available.
-		return access(jbroot("/.enable_auto_uicache_ios15"), F_OK) == 0;
+	if (@available(iOS 16.0, *)) {
+		return YES;
 	}
-#endif
-
+	// iOS 15 A12+ safety default. The in-app manual refresh remains available.
+	return access(jbroot("/.enable_auto_uicache_ios15"), F_OK) == 0;
+#else
 	return YES;
+#endif
 }
 
 int new_LSServer_RebuildApplicationDatabases()
