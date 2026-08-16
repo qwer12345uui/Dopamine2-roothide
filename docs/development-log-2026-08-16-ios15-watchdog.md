@@ -74,3 +74,23 @@
 追加的设备验收应严格分开观察安装服务和应用兼容性：对可在 iOS 15.0 正常运行的 App Store 应用连续执行新安装、覆盖更新、重启 SpringBoard 与首次前台启动，预期不再出现 Dopamine 安全模式提示。若某个应用仍报告 `DYLD Symbol missing`，应将其判定为该应用不支持 iOS 15.0，而非运行本补丁后的安装服务回归。
 
 [4] [上游 App Store 安装和更新失败问题 #113](https://github.com/roothide/Dopamine2-roothide/issues/113)
+
+## 追加调查二：安装完成后的长时间卡死与 Boot Logo
+
+本轮重新检查视频后，时间线比此前的“安装期预热”更明确：安装操作在约 `00:08` 结束，约 `01:15` 才进入黑屏旋转状态，旋转持续到约 `03:15`，随后经历启动画面并在约 `03:59` 出现 `Watchdog Timeout`。这说明问题不是安装命令立即失败，而是**安装完成后 LaunchServices 数据库重建与 SpringBoard 恢复阶段发生的 userspace 重启卡死**。视频中约两分钟的可见旋转时间，与用户报告的较长等待并不矛盾；看门狗记录的是关键进程未恢复后的保护性降级。
+
+当前分支已确认以 RootHide 上游 `2.4.9.25` 对应的 `44d398a` 为祖先，故不存在可直接合并的更新提交；在该最新基线上保留先前的安装服务隔离修复，并针对最新版本新增的 `lsd` 逻辑实施补强。[5]
+
+| 触发链路 | 代码证据 | 修复 |
+| --- | --- | --- |
+| 应用数据库重建 | `new_LSServer_RebuildApplicationDatabases` 在原实现中每次回调均异步执行 `uicache -a`，并等待其退出。`uicache -a` 又会触发 LaunchServices 重建。 | 为 iOS 15 arm64e 将该自动全量刷新改为默认关闭；只有显式创建 `jbroot:/.enable_auto_uicache_ios15` 标记时才可恢复。手动“刷新越狱应用”入口保持可用。 |
+| 相同 lsd 进程中的重复重建 | 原代码没有单飞或去重逻辑，安装、更新和后续重建可重复排队全量 uicache。 | 使用 `dispatch_once` 对每个 lsd 进程收敛为一次后台刷新；iOS 16 及更高版本仍保留原有自动刷新意图，但不会形成同一进程的重复队列。 |
+| 自定义 Boot Logo 资源 | 原代码先删除旧 JP2 后以非原子写入创建新文件；选取原始高分辨率图库图片会在激活阶段再次加载。 | 启动图编码失败时返回错误；使用 `NSDataWritingAtomic` 替换旧资源；选图时统一方向并限制最长边为 2048 px。 |
+
+> 本次没有通过屏蔽看门狗来“消除”告警。看门狗仍会保护真正的 SpringBoard 卡死；修复针对的是安装完成后触发全量 uicache 与 LaunchServices 数据库重建之间的可重入工作链。
+
+Boot Logo 设置界面继续提供参考图所示的 **Enabled**、**Custom Boot Logo** 和 **Select Image** 流程。它在用户空间重启时显示配置的 JP2 启动图，不修改 iBoot、设备固件或冷启动的 Apple 标志；因此不会扩大底层引导风险。选择自定义图片后，图片会保存至应用私有目录，并在下次越狱激活或设置更新时原子刷新到 Jailbreak 根目录。
+
+本轮自动验证新增 `lsd` 防重入、iOS 15 显式启用标记、单飞 gate、Boot Logo 原子写入及 2048 px 上限检查。仍须在 iPhone11,6 / iOS 15.0 上验证新装、覆盖更新、连续更新及手动刷新越狱应用。验收标准是每轮安装完成后 SpringBoard 在正常时限内恢复，且不再进入长时间旋转、Apple 标志或 Dopamine 的 Watchdog Timeout 安全模式。
+
+[5] [RootHide Dopamine2-roothide 2.4.9.25 发布说明](https://github.com/roothide/Dopamine2-roothide/releases/tag/25)

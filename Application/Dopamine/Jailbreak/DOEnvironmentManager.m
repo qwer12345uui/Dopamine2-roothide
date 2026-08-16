@@ -733,14 +733,27 @@ int reboot3(uint64_t flags, ...);
             bootLogoImage = [[DOUIManager sharedInstance] renderBootLogo];
         }
 
+        NSData *bootLogoData = [bootLogoImage jp2DataWithCompressionQuality:0.9];
+        if (bootLogoData.length == 0) {
+            return [NSError errorWithDomain:@"com.opa334.Dopamine-roothide.bootlogo"
+                                        code:1
+                                    userInfo:@{NSLocalizedDescriptionKey : @"Unable to encode boot logo image"}];
+        }
+
+        __block NSError *writeError = nil;
+        NSString *destination = [NSString stringWithUTF8String:bootLogoPath];
         [self runAsRoot:^{
             [self runUnsandboxed:^{
-                unlink(bootLogoPath);
-                [[bootLogoImage jp2DataWithCompressionQuality:0.9] writeToFile:[NSString stringWithUTF8String:bootLogoPath] atomically:NO];
+                // NSDataWritingAtomic replaces the previous valid logo only after a
+                // complete JP2 file is available. launchd therefore never sees a
+                // partially written logo while jailbreaking or changing settings.
+                if (![bootLogoData writeToFile:destination options:NSDataWritingAtomic error:&writeError]) {
+                    return;
+                }
             }];
         }];
 
-        return nil;
+        return writeError;
     }
     else {
         [self runAsRoot:^{

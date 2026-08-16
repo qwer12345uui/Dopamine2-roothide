@@ -79,6 +79,11 @@ grep -Fq 'skip injection for iOS 15 app prewarm' BaseBin/launchdhook/src/roothid
 grep -Fq 'IOSurface image unavailable; skip iosConnect refresh' BaseBin/launchdhook/src/roothider.m
 grep -Fq '"/usr/libexec/installd"' BaseBin/systemhook/src/common.c
 grep -Fq '"/usr/libexec/appstored"' BaseBin/systemhook/src/common.c
+grep -Fq 'shouldAutoUICacheAfterDatabaseRebuild' BaseBin/roothidehooks/lsd.x
+grep -Fq '.enable_auto_uicache_ios15' BaseBin/roothidehooks/lsd.x
+grep -Fq 'static dispatch_once_t autoUICacheOnce' BaseBin/roothidehooks/lsd.x
+grep -Fq 'NSDataWritingAtomic' Application/Dopamine/Jailbreak/DOEnvironmentManager.m
+grep -Fq 'maxBootLogoDimension = 2048.0' Application/Dopamine/UI/Settings/DOSettingsController.m
 grep -Fq 'memchr(inputStruct' BaseBin/watchdoghook/src/main.m
 
 printf 'validated artifact=%s bundle_id=%s version=%s\n' "$artifact" "$bundle_id" "$short_version"

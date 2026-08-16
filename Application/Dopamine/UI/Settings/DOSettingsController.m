@@ -599,17 +599,33 @@
     if (!chosenImage) {
         chosenImage = info[UIImagePickerControllerOriginalImage];
     }
+    if (!chosenImage || chosenImage.size.width <= 0 || chosenImage.size.height <= 0) {
+        [picker dismissViewControllerAnimated:YES completion:nil];
+        return;
+    }
 
-    // Force correct the orientation
-    // For some reason without rerendering the image, the stored file will have a wrong orientation for photos taken with the camera‚
-    UIGraphicsBeginImageContextWithOptions(chosenImage.size, NO, 1.0);
-    [chosenImage drawInRect:CGRectMake(0,0, chosenImage.size.width, chosenImage.size.height)];
+    // Normalize orientation and cap the longest edge. The saved image is loaded
+    // again during jailbreak activation, so accepting a modern multi-megapixel
+    // photo here can otherwise create an avoidable memory spike at boot time.
+    const CGFloat maxBootLogoDimension = 2048.0;
+    CGSize targetSize = chosenImage.size;
+    CGFloat longestEdge = MAX(targetSize.width, targetSize.height);
+    if (longestEdge > maxBootLogoDimension) {
+        CGFloat scale = maxBootLogoDimension / longestEdge;
+        targetSize = CGSizeMake(targetSize.width * scale, targetSize.height * scale);
+    }
+
+    UIGraphicsBeginImageContextWithOptions(targetSize, NO, 1.0);
+    [chosenImage drawInRect:CGRectMake(0, 0, targetSize.width, targetSize.height)];
     chosenImage = UIGraphicsGetImageFromCurrentImageContext();
     UIGraphicsEndImageContext();
 
-    [UIImagePNGRepresentation(chosenImage) writeToFile:[DOUIManager sharedInstance].bootlogoPath atomically:YES];
+    NSData *pngData = UIImagePNGRepresentation(chosenImage);
+    if (pngData.length > 0) {
+        [pngData writeToFile:[DOUIManager sharedInstance].bootlogoPath atomically:YES];
+    }
 
-    if ([DOEnvironmentManager sharedManager].isJailbroken) {
+    if ([DOEnvironmentManager sharedManager].isJailbroken && pngData.length > 0) {
         dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
             [[DOEnvironmentManager sharedManager] updateBootLogo];
         });

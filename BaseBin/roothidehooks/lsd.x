@@ -609,24 +609,54 @@ NSURL* new_LSGetInboxURLForBundleIdentifier(NSString* bundleIdentifier)
 }
 
 int (*orig_LSServer_RebuildApplicationDatabases)()=NULL;
+
+/*
+ * uicache -a itself rebuilds LaunchServices databases. Scheduling it from this
+ * callback therefore feeds its own work back into lsd. On iOS 15 arm64e that
+ * reentrant chain can leave SpringBoard unresponsive until watchdog recovers
+ * the userspace. Normal App Store installs do not require a jailbreak-wide
+ * icon-cache rebuild, so keep the automatic refresh opt-in on that platform.
+ */
+static BOOL shouldAutoUICacheAfterDatabaseRebuild(void)
+{
+	if (access(jbroot("/.disable_auto_uicache"), F_OK) == 0) return NO;
+
+#ifdef __arm64e__
+	if (!__builtin_available(iOS 16.0, *)) {
+		// iOS 15 A12+ safety default. The in-app manual refresh remains available.
+		return access(jbroot("/.enable_auto_uicache_ios15"), F_OK) == 0;
+	}
+#endif
+
+	return YES;
+}
+
 int new_LSServer_RebuildApplicationDatabases()
 {
 	int r = orig_LSServer_RebuildApplicationDatabases();
+	if (!shouldAutoUICacheAfterDatabaseRebuild()) return r;
 
-	if(access(jbroot("/.disable_auto_uicache"), F_OK) == 0) return r;
-
-	dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-		// Ensure jailbreak apps are readded to icon cache after the system reloads it
-		// A bit hacky, but works
-		char* const args[] = {"/usr/bin/uicache", "-a", NULL};
-		const char *uicachePath = jbroot(args[0]);
-		if (access(uicachePath, F_OK) == 0) {
-			pid_t pid=0;
-			int spawnerr = posix_spawn(&pid, uicachePath, NULL, NULL, args, environ);
-			if(spawnerr==0) {
-				wait_for_exit(pid);
+	// A single lsd process must never start a recursive uicache loop. The
+	// per-process gate also coalesces bursts of LaunchServices work after an app
+	// installation or update into one bounded background refresh.
+	static dispatch_once_t autoUICacheOnce = 0;
+	dispatch_once(&autoUICacheOnce, ^{
+		dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+			@autoreleasepool {
+				char* const args[] = {"/usr/bin/uicache", "-a", NULL};
+				const char *uicachePath = jbroot(args[0]);
+				if (access(uicachePath, F_OK) == 0) {
+					pid_t pid = 0;
+					int spawnerr = posix_spawn(&pid, uicachePath, NULL, NULL, args, environ);
+					if (spawnerr == 0) {
+						wait_for_exit(pid);
+					}
+					else {
+						NSLog(@"failed to spawn automatic uicache: %d", spawnerr);
+					}
+				}
 			}
-		}
+		});
 	});
 
 	return r;
