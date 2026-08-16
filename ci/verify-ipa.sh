@@ -76,6 +76,9 @@ fi
 # hardware regression test can be performed on an iOS 15 arm64e device.
 grep -Fq 'Failed to create watchdog safe-mode marker' BaseBin/launchdhook/src/jbserver/jbdomain_watchdog.c
 grep -Fq 'skip injection for iOS 15 app prewarm' BaseBin/launchdhook/src/roothider.m
+grep -Fq 'IOSurface image unavailable; skip iosConnect refresh' BaseBin/launchdhook/src/roothider.m
+grep -Fq '"/usr/libexec/installd"' BaseBin/systemhook/src/common.c
+grep -Fq '"/usr/libexec/appstored"' BaseBin/systemhook/src/common.c
 grep -Fq 'memchr(inputStruct' BaseBin/watchdoghook/src/main.m
 
 printf 'validated artifact=%s bundle_id=%s version=%s\n' "$artifact" "$bundle_id" "$short_version"

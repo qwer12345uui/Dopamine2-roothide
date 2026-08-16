@@ -174,38 +174,58 @@ void roothide_launchd_postinit(bool firstLoad)
 
 #include <dlfcn.h>
 #include <IOKit/IOKitLib.h>
-void fix__iosConnect()
+
+/*
+ * This runs in launchd the first time an App Store-style bundle is launched.
+ * IOSurface state differs across iOS 15 point releases and may be temporarily
+ * unavailable while an app has just been installed or updated. Do not assert
+ * in pid 1: an optional connection refresh must fail closed instead of turning
+ * a recoverable IOKit error into an initproc/watchdog panic.
+ */
+static void fix__iosConnect(void)
 {
     MSImageRef IOSurfaceImage = MSGetImageByName("/System/Library/Frameworks/IOSurface.framework/IOSurface");
-    JBLogDebug("IOSurfaceImage=%p\n", IOSurfaceImage);
-    assert(IOSurfaceImage != NULL);
+    if (!IOSurfaceImage) {
+        JBLogError("IOSurface image unavailable; skip iosConnect refresh");
+        return;
+    }
 
-    io_service_t* __iosService = MSFindSymbol(IOSurfaceImage, "__iosService");
-    io_connect_t* __iosConnect = MSFindSymbol(IOSurfaceImage, "__iosConnect");
-    assert(__iosService != NULL && __iosConnect != NULL);
+    io_service_t* iosService = MSFindSymbol(IOSurfaceImage, "__iosService");
+    io_connect_t* iosConnect = MSFindSymbol(IOSurfaceImage, "__iosConnect");
+    if (!iosService || !iosConnect) {
+        JBLogError("IOSurface symbols unavailable; skip iosConnect refresh");
+        return;
+    }
 
-    JBLogDebug("__iosService=%p __iosConnect=%p\n", __iosService, __iosConnect);
-    JBLogDebug("*__iosService=%d *__iosConnect=%d\n", *__iosService, *__iosConnect);
+	kern_return_t (*IOServiceClose)(io_connect_t connect) = NULL;
+	kern_return_t (*IOServiceOpen)(io_service_t service, task_port_t owningTask, uint32_t type, io_connect_t* connect) = NULL;
+	*(void **)&IOServiceOpen = dlsym(RTLD_DEFAULT, "IOServiceOpen");
+	*(void **)&IOServiceClose = dlsym(RTLD_DEFAULT, "IOServiceClose");
+	if (!IOServiceOpen || !IOServiceClose) {
+        JBLogError("IOSurface IOKit entry points unavailable; skip iosConnect refresh");
+        return;
+    }
 
-    kern_return_t (*IOServiceClose)(io_connect_t connect);
-    kern_return_t (*IOServiceOpen)(io_service_t service, task_port_t owningTask, uint32_t type, io_connect_t* connect);
+    io_connect_t oldConnect = *iosConnect;
+    if (!oldConnect) {
+        return;
+    }
+    if (!*iosService) {
+        JBLogError("IOSurface service unavailable; preserve existing iosConnect");
+        return;
+    }
 
-    *(void **)&IOServiceOpen = dlsym(RTLD_DEFAULT, "IOServiceOpen");
-    *(void **)&IOServiceClose = dlsym(RTLD_DEFAULT, "IOServiceClose");
-    assert(IOServiceOpen != NULL && IOServiceClose != NULL);
-    
-    io_connect_t old__iosConnect = *__iosConnect;
+    io_connect_t newConnect = MACH_PORT_NULL;
+    kern_return_t kr = IOServiceOpen(*iosService, mach_task_self(), 0, &newConnect);
+    if (kr != KERN_SUCCESS || newConnect == MACH_PORT_NULL) {
+        JBLogError("IOServiceOpen failed (%x); preserve existing iosConnect", kr);
+        return;
+    }
 
-    if(old__iosConnect) {
-
-        assert(*__iosService != 0);
-
-        kern_return_t kr = IOServiceOpen(*__iosService, mach_task_self(), 0, __iosConnect);
-        JBLogDebug("IOServiceOpen kr=%x, new iosConnect=%d\n", kr, *__iosConnect);
-        assert(kr == KERN_SUCCESS);
-
-        kr = IOServiceClose(old__iosConnect);
-        assert(kr == KERN_SUCCESS);
+    *iosConnect = newConnect;
+    kr = IOServiceClose(oldConnect);
+    if (kr != KERN_SUCCESS) {
+        JBLogError("IOServiceClose failed (%x) after iosConnect refresh", kr);
     }
 }
 

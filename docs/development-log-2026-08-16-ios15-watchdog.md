@@ -49,3 +49,28 @@
 [1] [项目当前 2.x 分支与构建说明](https://github.com/qwer12345uui/Dopamine2-roothide)
 [2] [上游 iOS 15 自旋锁相关公开问题](https://github.com/roothide/Dopamine2-roothide/issues/101)
 [3] [iPhone 上 `initproc exited` panic 的相似案例](https://github.com/frida/frida/issues/1380)
+
+## 追加调查：安装或更新后的安全模式问题
+
+新增证据包括一段现场视频、三个系统会话记录，以及两个应用的 `bug_type 309` 崩溃报告。视频显示在安装 `LocalIocRecorder 1.0.2` 后发生长时间 respring 卡死，随后出现 Dopamine 的 `Watchdog Timeout` 提示并自动禁用注入。该提示说明安全模式是**保护动作的结果**，而不是对“插件已经被禁用”的反证；禁用发生在看门狗检测到关键进程迟迟未恢复之后。
+
+与此同时，新增 IPS 还包含必须与看门狗问题分离处理的应用兼容性失败：`com.fenghuang.7703` 在启动后不到 20 毫秒由 dyld 以 `Foundation.URLRequest.httpMethod` 符号缺失终止。这是应用二进制请求了 iOS 15.0 的 Foundation 中没有的符号，无法由越狱注入或看门狗修复使其在该系统版本上运行。两份支付宝报告均是应用自身调用 `abort()` 的 `SIGABRT`，没有将 Roothide 动态库列为崩溃镜像或给出看门狗超时作为终止原因。因此，修复目标保持为**避免安装事务和首次可移除应用启动使关键系统进程卡死**，而不掩盖单个应用的最低系统版本或自身中止。
+
+| 新证据 | 观察结果 | 修复处理 |
+| --- | --- | --- |
+| `IMG_0546.mov` | 安装后 respring 长时间无响应，最终由 Dopamine 保护性安全模式恢复。 | 保留看门狗保护；从源头减少安装服务继承注入与暂停子进程的概率。 |
+| `lAGbxgJBvYTq` IPS | `DYLD 4 Symbol missing`，`URLRequest.httpMethod` 在 iOS 15.0 Foundation 中缺失。 | 记录为应用/系统版本兼容性失败，不通过越狱层伪造缺失 API。 |
+| `AlipayWallet` IPS | `SIGABRT`，应用内多线程运行后中止；无 Roothide 注入镜像证据。 | 记录为独立应用中止，避免与安装服务看门狗问题混淆。 |
+| 上游安装问题 #113 | 上游维护者的首要隔离建议是关闭注入并 userspace reboot；用户随后确认安装恢复。 | 本补丁在安装服务进程层面默认执行该隔离，而不要求关闭整个越狱环境。 [4] |
+
+本轮代码修改如下。
+
+| 文件 | 修改 | 安全性意义 |
+| --- | --- | --- |
+| `BaseBin/launchdhook/src/roothider.m` | 将首次可移除应用启动触发的 `fix__iosConnect` 从多个 `assert` 改为检查失败即记录并返回；仅在新连接成功后替换旧连接。 | 该逻辑运行在 `launchd`，因此任一 IOSurface 符号、服务或连接的暂时不可用都不得终止 pid 1 并升级为看门狗恢复。 |
+| `BaseBin/systemhook/src/common.c` | 将 `installd`、`appstored`、`storekitd` 与 `mobile_installation_proxy` 加入共享 spawn 注入黑名单。 | 这些已受平台信任的安装服务不会再继承 systemhook 动态库、子进程暂停及 dyld patch 处理；普通应用的后续正常启动不受此黑名单影响。 |
+| `ci/verify-ipa.sh` | 新增对 IOSurface 非致命分支和安装服务隔离规则的回归检查。 | 每次在线构建均验证本轮防护仍在 IPA 所属源码中。 |
+
+追加的设备验收应严格分开观察安装服务和应用兼容性：对可在 iOS 15.0 正常运行的 App Store 应用连续执行新安装、覆盖更新、重启 SpringBoard 与首次前台启动，预期不再出现 Dopamine 安全模式提示。若某个应用仍报告 `DYLD Symbol missing`，应将其判定为该应用不支持 iOS 15.0，而非运行本补丁后的安装服务回归。
+
+[4] [上游 App Store 安装和更新失败问题 #113](https://github.com/roothide/Dopamine2-roothide/issues/113)
