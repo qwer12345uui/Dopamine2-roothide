@@ -46,50 +46,6 @@ bool string_has_suffix(const char* str, const char* suffix)
 	return !strcmp(str + str_len - suffix_len, suffix);
 }
 
-/*
- * iOS 15 arm64e has a known shared-cache spinlock failure mode. The supplied
- * panic reports show CommCenter and symptomsd as panicked platform tasks,
- * alongside a separately affected third-party app. These binaries do not
- * need RootHide's user-space library injection or trust-cache forwarding:
- * they are already platform trusted. Avoiding injection also keeps dyldhook's
- * private shared-cache remap out of their startup path.
- */
-static bool isIOS15CriticalSystemDaemon(const char *path)
-{
-	if (__builtin_available(iOS 16.0, *)) {
-		return false;
-	}
-
-	const char *criticalSuffixes[] = {
-		"/CommCenter",
-		"/symptomsd",
-		"/backboardd",
-		"/watchdogd",
-		"/memorycontrold",
-		"/SpringBoard.app/SpringBoard",
-	};
-	for (size_t i = 0; i < sizeof(criticalSuffixes) / sizeof(criticalSuffixes[0]); i++) {
-		if (string_has_suffix(path, criticalSuffixes[i])) {
-			return true;
-		}
-	}
-	return false;
-}
-
-/*
- * Increasing Jetsam limits system-wide turns a per-app tweak convenience into
- * a device-wide memory-pressure amplifier. Keep the multiplier for apps
- * installed inside jbroot, where it is useful for package-manager tooling,
- * and require an explicit marker to restore the legacy global behavior.
- */
-static bool shouldApplyJetsamMultiplier(const char *path)
-{
-	if (string_has_prefix(path, JBROOT_PATH("/Applications/"))) {
-		return true;
-	}
-	return access(JBROOT_PATH("/basebin/.enable_global_jetsam_multiplier"), F_OK) == 0;
-}
-
 void string_enumerate_components(const char *string, const char *separator, void (^enumBlock)(const char *pathString, bool *stop))
 {
 	char *stringCopy = strdup(string);
@@ -125,10 +81,6 @@ kSpawnConfig spawn_config_for_executable(const char* path, char *const argv[rest
 	for (size_t i = 0; i < blacklistCount; i++)
 	{
 		if (!strcmp(processBlacklist[i], path)) return 0;
-	}
-
-	if (isIOS15CriticalSystemDaemon(path)) {
-		return 0;
 	}
 
 	return (kSpawnConfigInject | kSpawnConfigTrust);
@@ -227,10 +179,8 @@ static int spawn_exec_hook_common(const char *path,
 		}
 	} while (0);
 
-	// Restrict the optional Jetsam increase to jbroot applications. Applying it
-	// to SpringBoard, platform daemons, or ordinary App Store apps makes memory
-	// pressure recovery slower and was visible in the supplied watchdog reports.
-	if (shouldInsertJBEnv && shouldApplyJetsamMultiplier(path)) {
+	// If systemhook is being injected and jetsam limits are set, increase them by a factor of jetsamMultiplier
+	if (shouldInsertJBEnv) {
 		uint8_t *attrStruct = (uint8_t *)attr;
 		if (attrStruct) {
 			if (jetsamMultiplier == 0 || isnan(jetsamMultiplier)) jetsamMultiplier = 3; // default value (3x)

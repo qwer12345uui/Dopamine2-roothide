@@ -90,12 +90,6 @@ grep -Fq '.enable_iosurface_refresh_ios15' BaseBin/launchdhook/src/roothider.m
 grep -Fq 'roothideBlacklisted || choicyBlocked || !dyld_patch_enabled() || !iOS15Arm64e' BaseBin/launchdhook/src/roothider.m
 grep -Fq 'DOWallpaperDidChangeNotification' Application/Dopamine/UI/DOUIManager.m
 grep -Fq 'customWallpaperEnabled' Application/Dopamine/UI/Settings/DOSettingsController.m
-grep -Fq 'isIOS15CriticalSystemDaemon' BaseBin/systemhook/src/common.c
-grep -Fq 'SpringBoard.app/SpringBoard' BaseBin/systemhook/src/common.c
-grep -Fq 'shouldApplyJetsamMultiplier' BaseBin/systemhook/src/common.c
-grep -Fq '.enable_global_jetsam_multiplier' BaseBin/systemhook/src/common.c
-grep -Fq 'recordAdded' BaseBin/libjailbreak/src/roothider/exec_patch.m
-grep -Fq 'Register the record synchronously before arming the' BaseBin/libjailbreak/src/roothider/exec_patch.m
 grep -Fq 'memchr(inputStruct' BaseBin/watchdoghook/src/main.m
 
 printf 'validated artifact=%s bundle_id=%s version=%s\n' "$artifact" "$bundle_id" "$short_version"

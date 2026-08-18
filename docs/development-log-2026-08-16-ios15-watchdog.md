@@ -113,17 +113,3 @@ Boot Logo 设置界面继续提供参考图所示的 **Enabled**、**Custom Boot
 > 自旋锁修复不能被整体关闭：上传的 kernel panic 与 iOS 15 arm64e dyld 共享缓存风险相符。此次修复仅将 **明确安全模式、无插件负载** 的 App 从同步远程补丁中排除，同时保留正常 RootHide 注入进程的原始 spinlock mitigation。
 
 本轮 IPA 回归脚本新增官方版本、IOSurface iOS 15 默认保护、安全模式 spinlock 降级和自定义壁纸通知/偏好键检查。最终设备验收应在 iPhone11,6 / iOS 15.0 上按顺序完成：越狱后首次打开普通 App、安装新 App、覆盖更新同一 App、连续两次更新、再手动“刷新越狱应用”。通过标准是每次操作后 SpringBoard 正常返回且不出现黑屏旋转、Apple 标志或 Dopamine `Watchdog Timeout`；若仍出现 `Spinlock` kernel panic，则需收集新 `.ips` 以区分正常注入进程中的 dyld 共享缓存问题与安装恢复链回归。
-
-## 追加调查四：8 月 18 日全量 panic、SpringBoard 看门狗与资源优化
-
-新增的三份 `bug_type 210` kernel panic 均来自 iPhone11,6 / iOS 15.0（19A346），且均为同一内核位置 `locks.c:723` 的 Spinlock 超时，而不是 Jetsam 终止或普通 App 崩溃。被恐慌任务分别是 `Aweme`（107 个线程、51,947 页）、`CommCenter`（18 个线程、1,654 页）与 `symptomsd`（5 个线程、877 页）。因此不能把问题归咎于单一 App 或单纯内存不足：相同的共享缓存自旋锁故障已经跨越第三方 App 和平台守护进程。
-
-与此同时，至少五份完整 SpringBoard `bug_type 309` 报告均为 `WATCHDOG` namespace，文本明确说明 SpringBoard 未能向 backboardd 发送监控 ping。三组相邻报告先记录 60 秒未响应，再在约 60 秒后记录 120 秒未响应及 watchdogd 诱导重启。这是跳板主响应链卡死的直接证据，不是 UI 崩溃或单纯内存回收。报告中未出现 RootHide、ElleKit、Substrate、systemhook 或 basebin 注入镜像字符串；不过源码审查表明 iOS 15 仍会让 SpringBoard 和多个系统守护进程经过通用 systemhook/dyldhook 启动路径，因此应优先缩小该路径的覆盖面。
-
-| 证据或风险点 | 修复 | 资源与稳定性意义 |
-| --- | --- | --- |
-| `CommCenter` 与 `symptomsd` Spinlock panic；SpringBoard/watchdogd/backboardd 处于相同系统恢复窗口 | iOS 15 上将 CommCenter、symptomsd、SpringBoard、backboardd、watchdogd 和 memorycontrold 识别为关键系统进程，不再注入 systemhook 或走 RootHide 信任转发。 | 这些平台信任二进制不需要第三方动态库注入；移除 dyldhook 私有共享缓存重映射和启动期 check-in，降低自旋锁与跳板恢复竞争。 |
-| 默认 Jetsam 倍数 | 将倍数限制为 jbroot 下的越狱应用；正常 App、SpringBoard 与系统守护进程不再被全局内存限额放大。仅在创建 `jbroot:/basebin/.enable_global_jetsam_multiplier` 时恢复旧的全局行为。 | 避免把辅助越狱 App 的内存便利扩大为全系统内存压力放大器，从而缩短系统在高压后的恢复时间。 |
-| `exec_patch.m` 中 `EVFILT_PROC` 注册与 resume 记录异步写入 | 先同步写入 pid/resume 记录，再注册 one-shot kevent；注册失败会回滚记录。事件循环的 `assert` 替换为可恢复的错误记录。 | 旧顺序中，快速 exec 可在记录入队前到达，导致事件处理器找不到 resume 标记并让暂停进程无法恢复；这类卡死可传播到 SpringBoard/LaunchServices 看门狗。 |
-
-本轮并未通过降低 watchdog 阈值、吞掉 watchdog 事件或关闭全部 spinlock mitigation 来伪造“稳定”。全局 dyld 自旋锁缓解仍保留给正常注入的用户与越狱进程；本次仅隔离已知不需要注入的 iOS 15 平台核心，并修复确实存在的 suspended-child 竞态。设备验收应连续覆盖：越狱后首次打开 App、连续安装/更新、SpringBoard 重启、蜂窝网络状态变更和长时间待机唤醒。通过条件是无新的 `locks.c:723` panic、无 60/120 秒 SpringBoard watchdog pair，且不出现不可恢复的旋转等待。
