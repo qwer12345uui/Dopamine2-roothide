@@ -82,6 +82,9 @@ grep -Fq '"/usr/libexec/appstored"' BaseBin/systemhook/src/common.c
 grep -Fq 'shouldAutoUICacheAfterDatabaseRebuild' BaseBin/roothidehooks/lsd.x
 grep -Fq '.enable_auto_uicache_ios15' BaseBin/roothidehooks/lsd.x
 grep -Fq 'static dispatch_once_t autoUICacheOnce' BaseBin/roothidehooks/lsd.x
+grep -Fq 'shouldRefreshJailbrokenAppsAtStartup' BaseBin/jbctl/src/internal.m
+grep -Fq '.enable_startup_uicache_ios15' BaseBin/jbctl/src/internal.m
+grep -Fq 'skip automatic uicache on iOS 15' BaseBin/jbctl/src/internal.m
 grep -Fq 'NSDataWritingAtomic' Application/Dopamine/Jailbreak/DOEnvironmentManager.m
 grep -Fq 'maxBootLogoDimension = 2048.0' Application/Dopamine/UI/Settings/DOSettingsController.m
 grep -Fqx '2.4.9.25' BaseBin/_external/basebin/.version

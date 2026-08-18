@@ -148,3 +148,17 @@ Boot Logo 设置界面继续提供参考图所示的 **Enabled**、**Custom Boot
 这意味着该 CPU 报告更像是安装/更新后可能加剧卡顿的**伴随系统负载证据**，而非新的可直接在 App 内“修复”的崩溃根因。安装/更新后应保持 `.enable_auto_uicache_ios15` 不存在；若设备仍在运行旧 IPA，需要安装含该默认保护的当前构建、执行一次 userspace reboot 或重新越狱，再重新采集同一时间窗内的 `aggregated`、`lsd`、SpringBoard、watchdog 及完整 panic 日志进行对比。
 
 [6] [新增 `aggregated` CPU 资源报告（设备现场附件）](../../upload/aggregated.cpu_resource-2026-08-19-040536.ips)
+
+## 追加调查八：启动期全量缓存刷新收敛
+
+对当前构建路径的审计发现，`roothidehooks/lsd.x` 已在 iOS 15 arm64e 默认关闭“数据库重建后自动 `uicache -a`”，但 `jbctl internal startup` 仍会在每一次重新越狱或 userspace reboot 后无条件执行一次同步 `uicache -a`。该启动期刷新不是普通 App Store 应用安装、更新或首次打开所必需；它会让 `lsd` 重建 LaunchServices 数据库，可能与系统自身的安装后 reconciliation、`CoreServicesStore` 扫描及 `aggregated` 的功耗统计工作在同一恢复窗口叠加。
+
+| 路径 | iOS 15 arm64e 新策略 | 保留的能力 |
+| --- | --- | --- |
+| `LSServer_RebuildApplicationDatabases` 回调 | 继续默认不自动刷新，只有 `.enable_auto_uicache_ios15` 才会恢复旧行为。 | 手动“刷新越狱应用”仍可使用。 |
+| `jbctl internal startup` | 新增 `shouldRefreshJailbrokenAppsAtStartup`；默认跳过启动期 `uicache -a`。 | iOS 16+ 维持旧的启动期刷新；iOS 15 需要时可创建 `jbroot:/basebin/.enable_startup_uicache_ios15` 显式恢复。 |
+| 用户主动刷新 | 不改变 `DOEnvironmentManager refreshJailbreakApps` 的手动操作。 | 用户可在确认系统空闲时自行刷新越狱应用图标。 |
+
+这项防护不尝试关闭、杀死、节流或注入 Apple 的 `aggregated` 守护进程，也不改变 `launchd`、`watchdogd`、`jailbreakd` 与安装服务的启动路径。它仅移除 iOS 15 恢复窗口中的一项非必要、全局且同步的 LaunchServices 工作，以降低以后安装/更新完成、首次启动或 userspace reboot 后出现 CoreServices/Powerlog CPU 峰值并放大 SpringBoard 看门狗的概率。`.disable_startup_uicache` 同时提供跨版本的显式禁用开关；正常 iOS 15 用户无需创建任何标记文件。
+
+IPA 回归脚本已检查启动期判定函数、iOS 15 显式回退标记和跳过日志文本，防止未来合并时重新引入无条件启动期全量刷新。该优化降低已知可控触发源，不能承诺消除 Apple 内核、Powerlog 或第三方 App 自身导致的所有 CPU 异常；仍须通过真机连续安装、覆盖更新、重新越狱和首次启动验证。

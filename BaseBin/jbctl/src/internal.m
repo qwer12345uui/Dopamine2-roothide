@@ -2,6 +2,27 @@
 #import <Foundation/Foundation.h>
 #import <libjailbreak/libjailbreak.h>
 #import <sys/mount.h>
+#import <unistd.h>
+
+/*
+ * A full uicache rebuild causes lsd to rebuild LaunchServices databases and
+ * makes iOS collect a large amount of CoreServices/Powerlog state.  On iOS 15
+ * arm64e this is non-essential at every jailbreak startup and can overlap the
+ * system's own post-install reconciliation work.  Keep it opt-in there; the
+ * in-app manual "Refresh Jailbreak Apps" operation remains available.
+ */
+static bool shouldRefreshJailbrokenAppsAtStartup(void)
+{
+	if (access(JBROOT_PATH("/.disable_startup_uicache"), F_OK) == 0) return false;
+
+#ifdef __arm64e__
+	if (!__builtin_available(iOS 16.0, *)) {
+		return access(JBROOT_PATH("/.enable_startup_uicache_ios15"), F_OK) == 0;
+	}
+#endif
+
+	return true;
+}
 
 SInt32 CFUserNotificationDisplayAlert(CFTimeInterval timeout, CFOptionFlags flags, CFURLRef iconURL, CFURLRef soundURL, CFURLRef localizationURL, CFStringRef alertHeader, CFStringRef alertMessage, CFStringRef defaultButtonTitle, CFStringRef alternateButtonTitle, CFStringRef otherButtonTitle, CFOptionFlags *responseFlags) API_AVAILABLE(ios(3.0));
 
@@ -190,11 +211,15 @@ JBLogDebug("jbctl startup: checking userspace panic ...");
 JBLogDebug("jbctl startup: bootstrapping launch daemons ...");
 exec_cmd(JBROOT_PATH("/usr/bin/launchctl"), "bootstrap", "system", "/Library/LaunchDaemons", NULL);
 
-JBLogDebug("jbctl startup: refreshing jailbroken apps ...");
-/************************* roothide specific ***************************/
-
-
+	/************************* roothide specific ***************************/
+	if (shouldRefreshJailbrokenAppsAtStartup()) {
+		JBLogDebug("jbctl startup: refreshing jailbroken apps ...");
 		exec_cmd(JBROOT_PATH("/usr/bin/uicache"), "-a", NULL);
+	}
+	else {
+		JBLogDebug("jbctl startup: skip automatic uicache on iOS 15");
+	}
+
 	}
 	else if (!strcmp(command, "install_pkg")) {
 		if (argc > 1) {
