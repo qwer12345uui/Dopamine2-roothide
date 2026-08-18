@@ -46,6 +46,25 @@ bool string_has_suffix(const char* str, const char* suffix)
 	return !strcmp(str + str_len - suffix_len, suffix);
 }
 
+/*
+ * The supplied iOS 15 arm64e SpringBoard reports contain PAC failures on the
+ * main thread while third-party TweakInject libraries are loaded. Keep the
+ * RootHide system hook required for bootstrapping, but do not forward foreign
+ * DYLD_INSERT_LIBRARIES entries to SpringBoard by default. Advanced users may
+ * opt back in explicitly by creating this marker under jbroot.
+ */
+static bool shouldFilterSpringBoardThirdPartyInserts(const char *path)
+{
+#ifdef __arm64e__
+	if (!__builtin_available(iOS 16.0, *) &&
+		string_has_suffix(path, "/SpringBoard.app/SpringBoard") &&
+		access(JBROOT_PATH("/basebin/.enable_springboard_tweaks_ios15"), F_OK) != 0) {
+		return true;
+	}
+#endif
+	return false;
+}
+
 void string_enumerate_components(const char *string, const char *separator, void (^enumBlock)(const char *pathString, bool *stop))
 {
 	char *stringCopy = strdup(string);
@@ -133,6 +152,7 @@ static int spawn_exec_hook_common(const char *path,
 	}
 
 	int JBEnvAlreadyInsertedCount = (int)systemHookAlreadyInserted;
+	bool filterSpringBoardThirdPartyInserts = shouldFilterSpringBoardThirdPartyInserts(path);
 
 	// Check if we can find at least one reason to not insert jailbreak related environment variables
 	// In this case we also need to remove pre existing environment variables if they are already set
@@ -199,7 +219,7 @@ static int spawn_exec_hook_common(const char *path,
 
 	int r = -1;
 
-	if ((shouldInsertJBEnv && JBEnvAlreadyInsertedCount == 1) || (!shouldInsertJBEnv && JBEnvAlreadyInsertedCount == 0 && !hasSafeModeVariable)) {
+	if (!filterSpringBoardThirdPartyInserts && ((shouldInsertJBEnv && JBEnvAlreadyInsertedCount == 1) || (!shouldInsertJBEnv && JBEnvAlreadyInsertedCount == 0 && !hasSafeModeVariable))) {
 		// we're already good, just call orig
 		r = orig(envp);
 	}
@@ -208,7 +228,18 @@ static int spawn_exec_hook_common(const char *path,
 
 		char **envc = envbuf_mutcopy((const char **)envp);
 
-		if (shouldInsertJBEnv) {
+		if (filterSpringBoardThirdPartyInserts) {
+			if (shouldInsertJBEnv) {
+				// Preserve RootHide bootstrapping but exclude all foreign tweak
+				// loaders from the iOS 15 SpringBoard process.
+				envbuf_setenv(&envc, "DYLD_INSERT_LIBRARIES", HOOK_DYLIB_PATH);
+			}
+			else {
+				// Safe mode must not inherit a third-party SpringBoard loader.
+				envbuf_unsetenv(&envc, "DYLD_INSERT_LIBRARIES");
+			}
+		}
+		else if (shouldInsertJBEnv) {
 			if (!systemHookAlreadyInserted) {
 				char newLibraryInsert[strlen(HOOK_DYLIB_PATH) + (existingLibraryInserts ? (strlen(existingLibraryInserts) + 1) : 0) + 1];
 				strcpy(newLibraryInsert, HOOK_DYLIB_PATH);

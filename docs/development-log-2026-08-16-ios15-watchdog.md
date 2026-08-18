@@ -113,3 +113,13 @@ Boot Logo 设置界面继续提供参考图所示的 **Enabled**、**Custom Boot
 > 自旋锁修复不能被整体关闭：上传的 kernel panic 与 iOS 15 arm64e dyld 共享缓存风险相符。此次修复仅将 **明确安全模式、无插件负载** 的 App 从同步远程补丁中排除，同时保留正常 RootHide 注入进程的原始 spinlock mitigation。
 
 本轮 IPA 回归脚本新增官方版本、IOSurface iOS 15 默认保护、安全模式 spinlock 降级和自定义壁纸通知/偏好键检查。最终设备验收应在 iPhone11,6 / iOS 15.0 上按顺序完成：越狱后首次打开普通 App、安装新 App、覆盖更新同一 App、连续两次更新、再手动“刷新越狱应用”。通过标准是每次操作后 SpringBoard 正常返回且不出现黑屏旋转、Apple 标志或 Dopamine `Watchdog Timeout`；若仍出现 `Spinlock` kernel panic，则需收集新 `.ips` 以区分正常注入进程中的 dyld 共享缓存问题与安装恢复链回归。
+
+## 追加调查五：新增 PAC 跳板崩溃与 SpringBoard 注入兼容性
+
+新增日志补全了此前仅有 watchdog 超时的跳板故障模式。`SpringBoard-2026-08-18-114342.ips` 与 `SpringBoard-2026-08-18-114405.ips` 都是 iOS 15 arm64e 主线程 `EXC_BAD_ACCESS / SIGSEGV`，并明确标记为“possible pointer authentication failure”。两份报告的已加载镜像包含实际第三方动态库：第一份包含 `PassByCC`、`HomeTapBackApp.dylib` 与 `AppData.dylib`，第二份包含 `PassByCC`、`floatingView.dylib` 与 `CraneSB.dylib`。这说明即便用户在故障后进入安全模式，产生 PAC 崩溃的那次 SpringBoard 启动仍然带有第三方注入载荷；日志不能支持“崩溃时没有插件加载”的判断。
+
+14:54 至 15:01 的新增记录还呈现两个完整的 SpringBoard watchdog 对：首次为无成功 check-in 或 60 秒未响应，约一分钟后升级为 120/130 秒未响应并由 watchdogd 诱导重启。这与前一批 03:19、08:13、11:07 的 60/120 秒模式一致，表明一旦跳板主线程进入错误或阻塞状态，系统会经历固定的两阶段恢复过程。
+
+本轮没有重启 `d2fc847` 中会影响越狱激活的核心守护进程全量排除策略。取而代之的是更窄的兼容性修复：在 iOS 15 arm64e 的 SpringBoard 启动中，保留 RootHide 的 `systemhook` 及引导必须路径，但默认将 `DYLD_INSERT_LIBRARIES` 收敛为 systemhook 自身，去除第三方 TweakInject 载荷；如果 SpringBoard 已处于安全模式，则彻底清除该变量，避免外部 tweak loader 继承。只有手动创建 `jbroot:/basebin/.enable_springboard_tweaks_ios15` 才会恢复旧的 SpringBoard 第三方插件注入行为。
+
+该设计的目标是优先让越狱和 SpringBoard 保持可启动，同时保留普通 App、越狱 App 和 RootHide 必需组件的现有注入策略。它针对 PAC 主线程崩溃与 watchdog 的直接证据，不伪造内核稳定性结论；新出现的 `watchdogd` Spinlock panic 仍提示 iOS 15 内核共享缓存问题需按进程与日志继续跟踪。验收应确认 SpringBoard 不再加载 `TweakInject/*.dylib`、不出现 PAC failure、且连续用户空间重启后无 60/120 秒 watchdog pair。
