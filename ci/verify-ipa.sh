@@ -87,6 +87,9 @@ grep -Fq 'maxBootLogoDimension = 2048.0' Application/Dopamine/UI/Settings/DOSett
 grep -Fqx '2.4.9.25' BaseBin/_external/basebin/.version
 grep -Fq 'MARKETING_VERSION = 2.4.9.25;' Application/Dopamine.xcodeproj/project.pbxproj
 grep -Fq '.enable_iosurface_refresh_ios15' BaseBin/launchdhook/src/roothider.m
+grep -Fq 'skipCommCenterInjection' BaseBin/launchdhook/src/roothider.m
+grep -Fq '.enable_commcenter_injection_ios15' BaseBin/launchdhook/src/roothider.m
+grep -Fq 'skip injection and spinlock RPC for iOS 15 CommCenter' BaseBin/launchdhook/src/roothider.m
 grep -Fq 'roothideBlacklisted || choicyBlocked || !dyld_patch_enabled() || !iOS15Arm64e' BaseBin/launchdhook/src/roothider.m
 grep -Fq 'DOWallpaperDidChangeNotification' Application/Dopamine/UI/DOUIManager.m
 grep -Fq 'customWallpaperEnabled' Application/Dopamine/UI/Settings/DOSettingsController.m

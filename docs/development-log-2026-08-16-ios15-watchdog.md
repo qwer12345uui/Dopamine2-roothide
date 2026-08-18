@@ -123,3 +123,11 @@ Boot Logo 设置界面继续提供参考图所示的 **Enabled**、**Custom Boot
 本轮没有重启 `d2fc847` 中会影响越狱激活的核心守护进程全量排除策略。取而代之的是更窄的兼容性修复：在 iOS 15 arm64e 的 SpringBoard 启动中，保留 RootHide 的 `systemhook` 及引导必须路径，但默认将 `DYLD_INSERT_LIBRARIES` 收敛为 systemhook 自身，去除第三方 TweakInject 载荷；如果 SpringBoard 已处于安全模式，则彻底清除该变量，避免外部 tweak loader 继承。只有手动创建 `jbroot:/basebin/.enable_springboard_tweaks_ios15` 才会恢复旧的 SpringBoard 第三方插件注入行为。
 
 该设计的目标是优先让越狱和 SpringBoard 保持可启动，同时保留普通 App、越狱 App 和 RootHide 必需组件的现有注入策略。它针对 PAC 主线程崩溃与 watchdog 的直接证据，不伪造内核稳定性结论；新出现的 `watchdogd` Spinlock panic 仍提示 iOS 15 内核共享缓存问题需按进程与日志继续跟踪。验收应确认 SpringBoard 不再加载 `TweakInject/*.dylib`、不出现 PAC failure、且连续用户空间重启后无 60/120 秒 watchdog pair。
+
+## 追加调查六：21:10 CommCenter 自旋锁与 launchd initproc 恐慌
+
+新提交的两份报告将残余风险收敛为两个独立类别。`panic-full-2026-08-18-211006.000.ips` 是 iOS 15.0 `Spinlock[...] timeout`，被恐慌任务为 `CommCenter`（pid 12549），并出现 `roothide.execpatch.event-queue` 线索；这与此前由 `Aweme`、`symptomsd`、`watchdogd` 出现的共享缓存/自旋锁样本不同，但共同点是平台或普通进程进入了 RootHide 可见的补丁事件范围。`panic-full-2026-08-18-211150.000.ips` 则是 pid 1 `launchd` 的 `initproc exited -- exit reason namespace 2 subcode 0xa`，没有给出足以将退出归因于单一 RootHide 函数的用户态栈；因此不能将它误修为“关闭 launchd 注入”或恢复会阻断越狱的全局守护进程隔离。
+
+本轮只对日志直接点名、且不承载 RootHide 功能的 `/usr/sbin/CommCenter` 做 iOS 15 arm64e 默认降级：不注入 systemhook，也不走同步自旋锁 RPC，直接使用原始 spawn 路径。`launchd`、`watchdogd`、`jailbreakd` 与 userspace reboot 相关服务保持原有路径，避免重现 `d2fc847` 的越狱启动失败。兼容性回退开关为 `jbroot:/basebin/.enable_commcenter_injection_ios15`；仅在需要诊断 CommCenter 注入时才应创建。
+
+本修复降低了已有 CommCenter panic 样本重复经过 RootHide 注入/补丁队列的机会，但不能声称修复所有 iOS 15 内核自旋锁：内核 panic 仍需要在实际设备上通过连续蜂窝网络切换、App 安装更新、userspace reboot 和待机唤醒进行验收。若仍出现 initproc exited，需保留与该次发生相邻的 SpringBoard、watchdog 与完整 panic 日志，以判定是启动过程中的上游系统退出还是可继续缩小的越狱路径。

@@ -415,6 +415,26 @@ int roothide_launchd___posix_spawn_prehook(pid_t *restrict pidp, const char *res
 	}
 #endif
 
+	/*
+	 * CommCenter is the panicked task in the supplied 21:10 iOS 15 spinlock
+	 * report. It is a platform daemon and has no RootHide payload to carry.
+	 * Route only this proven high-risk daemon through the original spawn path;
+	 * unlike a broad system-daemon blacklist this does not suppress launchd,
+	 * watchdogd, or the services required while jailbreak is activating.
+	 */
+	bool skipCommCenterInjection = false;
+#ifdef __arm64e__
+	if (iOS15Arm64e && path && strcmp(path, "/usr/sbin/CommCenter") == 0 &&
+		access(JBROOT_PATH("/basebin/.enable_commcenter_injection_ios15"), F_OK) != 0) {
+		skipCommCenterInjection = true;
+	}
+#endif
+
+	if (skipCommCenterInjection) {
+		JBLogDebug("skip injection and spinlock RPC for iOS 15 CommCenter: %s", path);
+		return __posix_spawn_orig_wrapper(pidp, path, desc, argv, envp);
+	}
+
 	bool roothideBlacklisted = isBlacklistedPath(path);
 	if (choicyBlocked || roothideBlacklisted)
 	{
