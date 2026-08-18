@@ -131,3 +131,20 @@ Boot Logo 设置界面继续提供参考图所示的 **Enabled**、**Custom Boot
 本轮只对日志直接点名、且不承载 RootHide 功能的 `/usr/sbin/CommCenter` 做 iOS 15 arm64e 默认降级：不注入 systemhook，也不走同步自旋锁 RPC，直接使用原始 spawn 路径。`launchd`、`watchdogd`、`jailbreakd` 与 userspace reboot 相关服务保持原有路径，避免重现 `d2fc847` 的越狱启动失败。兼容性回退开关为 `jbroot:/basebin/.enable_commcenter_injection_ios15`；仅在需要诊断 CommCenter 注入时才应创建。
 
 本修复降低了已有 CommCenter panic 样本重复经过 RootHide 注入/补丁队列的机会，但不能声称修复所有 iOS 15 内核自旋锁：内核 panic 仍需要在实际设备上通过连续蜂窝网络切换、App 安装更新、userspace reboot 和待机唤醒进行验收。若仍出现 initproc exited，需保留与该次发生相邻的 SpringBoard、watchdog 与完整 panic 日志，以判定是启动过程中的上游系统退出还是可继续缩小的越狱路径。
+
+## 追加调查七：`aggregated` CPU 资源报告
+
+`aggregated.cpu_resource-2026-08-19-040536.ips` 不是 panic、Jetsam 或 watchdog 终止报告，而是 iOS 的 CPU resource report。报告的目标进程为 Apple 系统守护进程 `/System/Library/PrivateFrameworks/AggregateDictionary.framework/Support/aggregated`（pid 4042），在 2026-08-19 04:03:48 至 04:05:33 的 104 秒窗口中使用了 90 秒 CPU 时间，平均 86%；系统只记录该资源异常，明确写明 `Action taken: none`。报告采样期间设备处于闲置、接电和 Background QoS，进程内存占用最高仅 19.67 MB，且没有热压力或低磁盘空间证据。
+
+| 证据 | 可确认的含义 | 不能据此推断的结论 |
+| --- | --- | --- |
+| `aggregated`、`PowerlogCore`、`PowerlogLiteOperators` | Apple 的功耗/统计收集守护进程正在执行后台聚合工作。 | 不能证明 Dopamine 应用自身占满 CPU。 |
+| 高频栈：`PowerlogLiteOperators -> CoreServices -> CoreServicesStore` | 高 CPU 与 CoreServices/LaunchServices 数据库读取、枚举或统计处理相关，时间上可与应用安装、更新或图标数据库变化重叠。 | 由于栈没有私有符号、调用来源或 IPC 发起者，不能证明某一个安装操作是唯一根因。 |
+| 无 `roothide`、`jbroot`、`TweakInject` 或 RootHide 动态库命中 | 该单一报告没有显示 RootHide 注入代码在 `aggregated` 中运行。 | 不能仅凭“没有命中”否定系统事件间接触发了后台统计。 |
+| `Action taken: none` | 这次异常未被系统按看门狗、Jetsam 或崩溃进行处置。 | 不能把本报告本身当作安全模式的直接原因。 |
+
+因此，不能也不应在 Dopamine 应用内杀死、节流或注入 `aggregated`：它是受系统管理的 Apple 守护进程，强行干预会破坏系统统计，并不能安全地消除内核自旋锁或 SpringBoard 看门狗。应用内可安全处理的只有**避免不必要地触发大规模 LaunchServices 工作**。当前分支已实现该处置：iOS 15 arm64e 的 `LSServer_RebuildApplicationDatabases` 回调默认不自动启动 `uicache -a`；只有创建 `jbroot:/basebin/.enable_auto_uicache_ios15` 才会恢复旧行为，且旧行为仍以每个 `lsd` 进程一次的 `dispatch_once` gate 去重。手动刷新越狱应用入口不受影响。
+
+这意味着该 CPU 报告更像是安装/更新后可能加剧卡顿的**伴随系统负载证据**，而非新的可直接在 App 内“修复”的崩溃根因。安装/更新后应保持 `.enable_auto_uicache_ios15` 不存在；若设备仍在运行旧 IPA，需要安装含该默认保护的当前构建、执行一次 userspace reboot 或重新越狱，再重新采集同一时间窗内的 `aggregated`、`lsd`、SpringBoard、watchdog 及完整 panic 日志进行对比。
+
+[6] [新增 `aggregated` CPU 资源报告（设备现场附件）](../../upload/aggregated.cpu_resource-2026-08-19-040536.ips)
