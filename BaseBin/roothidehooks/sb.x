@@ -1,7 +1,12 @@
 #import <Foundation/Foundation.h>
 #include <roothide.h>
 #import <fcntl.h>
+#include <unistd.h>
 #include "common.h"
+
+#ifndef DEBUG
+#define NSLog(args...)
+#endif
 
 bool stringStartsWith(const char *str, const char* prefix)
 {
@@ -145,8 +150,27 @@ static const void *kDenyQueryTagKey = &kDenyQueryTagKey;
 }
 %end
 
+/*
+ * iOS 15 arm64e performs large, synchronous icon and snapshot reconciliation
+ * after an app install/update.  The SpringBoard RootHide hooks below intercept
+ * FBS and SplashBoard during that window.  If LaunchServices is still updating,
+ * this can block the main SpringBoard work loop long enough to miss watchdog
+ * check-ins.  Keep the functionality opt-in on this platform; a user who needs
+ * the legacy behavior can create the explicit compatibility marker.
+ */
+static bool shouldLoadSpringBoardRootHideHooks(void)
+{
+#ifdef __arm64e__
+    if (!__builtin_available(iOS 16.0, *)) {
+        return access(jbroot("/.enable_ios15_springboard_roothidehooks"), F_OK) == 0;
+    }
+#endif
+    return true;
+}
+
 void sbInit(void)
 {
+	if (!shouldLoadSpringBoardRootHideHooks()) return;
 	NSLog(@"sbInit...");
 	%init();
 }

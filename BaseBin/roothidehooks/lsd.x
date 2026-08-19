@@ -1,5 +1,6 @@
 #import <Foundation/Foundation.h>
 #import <spawn.h>
+#include <unistd.h>
 #include <roothide.h>
 #include "common.h"
 
@@ -9,6 +10,19 @@ extern char **environ;
 #pragma GCC diagnostic ignored "-Wunused-variable"
 
 #define PROC_PIDPATHINFO_MAXSIZE        (4*MAXPATHLEN)
+
+/* The recursive LSPlugInQueryAllUnits rewrite can re-enter the same lsd query
+ * during an App Store install/update.  iOS 15 arm64e is prone to a long
+ * LaunchServices reconciliation chain, so leave this legacy filter opt-in. */
+static BOOL shouldFilterRecursivePluginUnits(void)
+{
+#ifdef __arm64e__
+	if (!__builtin_available(iOS 16.0, *)) {
+		return access(jbroot("/.enable_ios15_lsd_recursive_filter"), F_OK) == 0;
+	}
+#endif
+	return YES;
+}
 /*lsd can only get path for normal app via proc_pidpath, or we can use
   xpc_connection_get_audit_token([xpc _xpcConnection], &token) //_LSCopyExecutableURLForXPCConnection
   proc_pidpath_audittoken(tokenarg, buffer, size) //_LSCopyExecutableURLForAuditToken 
@@ -138,7 +152,7 @@ extern char **environ;
 				NSLog(@"LSPlugInQueryWithIdentifier: _identifier=%@", [key valueForKey:@"_identifier"]);
 			}
 		}
-		else if([key isKindOfClass:NSClassFromString(@"LSPlugInQueryAllUnits")])
+		else if([key isKindOfClass:NSClassFromString(@"LSPlugInQueryAllUnits")] && shouldFilterRecursivePluginUnits())
 		{
 			NSMutableArray* unitsArray = result[key];
 			for (int i=0; i<[unitsArray count]; i++)
