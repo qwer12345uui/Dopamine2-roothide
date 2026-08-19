@@ -399,9 +399,13 @@ int reboot3(uint64_t flags, ...);
 
 - (void)setJailbreakToolsHidden:(BOOL)hidden
 {
+    __block BOOL didChange = NO;
     [self runAsRoot:^{
         [self runUnsandboxed:^{
             NSString *markerPath = JBROOT_PATH(@"/.hide_jailbreak_tools");
+            BOOL currentlyHidden = [[NSFileManager defaultManager] fileExistsAtPath:markerPath];
+            if (hidden == currentlyHidden) return;
+
             if (hidden) {
                 [[NSFileManager defaultManager] createFileAtPath:markerPath contents:[NSData data] attributes:nil];
                 [self unregisterJailbreakApps];
@@ -410,8 +414,17 @@ int reboot3(uint64_t flags, ...);
                 [[NSFileManager defaultManager] removeItemAtPath:markerPath error:nil];
                 [self refreshJailbreakApps];
             }
+            didChange = YES;
         }];
     }];
+
+    // `uicache -u` updates LaunchServices but does not synchronously replace an
+    // already materialized SpringBoard icon page. Restart SpringBoard outside the
+    // LaunchServices transaction so it reconstructs the page from a consistent
+    // model rather than faulting stale application records on first swipe.
+    if (didChange) {
+        [self respring];
+    }
 }
 
 - (void)unregisterJailbreakApps
