@@ -167,7 +167,7 @@
 
         self.updateButton.userInteractionEnabled = NO;
         [UIView animateWithDuration:0.75 delay:0 usingSpringWithDamping:0.9 initialSpringVelocity:2.0  options: UIViewAnimationOptionCurveEaseInOut animations:^{
-            [headerView setTransform:CGAffineTransformMakeTranslation(0, -25)];
+            [self.headerView setTransform:CGAffineTransformMakeTranslation(0, -25)];
             self.updateButton.alpha = 0;
         } completion:nil];
         
