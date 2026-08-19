@@ -29,11 +29,11 @@ static int watchdog_intercept_userspace_panic(const char *panicMessage)
 	 * a recoverable watchdog event into an initproc failure. */
 	FILE *touchFile = fopen(JBROOT_PATH("/basebin/.safe_mode"), "w");
 	if (!touchFile) {
-		JBLogError("Failed to create watchdog safe-mode marker");
+		fprintf(stderr, "Failed to create watchdog safe-mode marker\n");
 		return -1;
 	}
 	if (fclose(touchFile) != 0) {
-		JBLogError("Failed to finalize watchdog safe-mode marker");
+		fprintf(stderr, "Failed to finalize watchdog safe-mode marker\n");
 		return -1;
 	}
 

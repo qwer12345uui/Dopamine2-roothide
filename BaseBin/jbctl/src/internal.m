@@ -157,11 +157,11 @@ int jbctl_handle_internal(const char *command, int argc, char* argv[])
 			exec_cmd(JBROOT_PATH("/usr/bin/launchctl"), "bootstrap", "system", "/Library/LaunchDaemons", NULL);
 
 			if (shouldRefreshJailbrokenAppsAtStartup()) {
-				JBLogDebug("jbctl startup: refreshing jailbroken apps ...");
+				fprintf(stderr, "jbctl startup: refreshing jailbroken apps ...\n");
 				exec_cmd(JBROOT_PATH("/usr/bin/uicache"), "-a", NULL);
 			}
 			else {
-				JBLogDebug("jbctl startup: skip automatic uicache on iOS 15");
+				fprintf(stderr, "jbctl startup: skip automatic uicache on iOS 15\n");
 			}
 	}
 	else if (!strcmp(command, "install_pkg")) {
