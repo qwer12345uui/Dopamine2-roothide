@@ -161,7 +161,8 @@ static const void *kDenyQueryTagKey = &kDenyQueryTagKey;
 static bool shouldLoadSpringBoardRootHideHooks(void)
 {
 #ifdef __arm64e__
-    if (!__builtin_available(iOS 16.0, *)) {
+    NSOperatingSystemVersion version = [[NSProcessInfo processInfo] operatingSystemVersion];
+    if (version.majorVersion < 16) {
         return access(jbroot("/.enable_ios15_springboard_roothidehooks"), F_OK) == 0;
     }
 #endif

@@ -17,7 +17,8 @@ extern char **environ;
 static BOOL shouldFilterRecursivePluginUnits(void)
 {
 #ifdef __arm64e__
-	if (!__builtin_available(iOS 16.0, *)) {
+	NSOperatingSystemVersion version = [[NSProcessInfo processInfo] operatingSystemVersion];
+	if (version.majorVersion < 16) {
 		return access(jbroot("/.enable_ios15_lsd_recursive_filter"), F_OK) == 0;
 	}
 #endif
