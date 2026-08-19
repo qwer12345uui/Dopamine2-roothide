@@ -14,7 +14,7 @@ NSString * const DOWallpaperDidChangeNotification = @"DOWallpaperDidChangeNotifi
 
 @implementation DOUIManager
 
-+ (id)sharedInstance
++ (instancetype)sharedInstance
 {
     static DOUIManager *sharedInstance = nil;
     static dispatch_once_t onceToken;
