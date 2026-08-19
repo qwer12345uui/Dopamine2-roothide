@@ -220,6 +220,15 @@
             [tweakInjectionSpecifier setProperty:@"tweakInjectionEnabled" forKey:@"key"];
             [tweakInjectionSpecifier setProperty:@YES forKey:@"default"];
             [specifiers addObject:tweakInjectionSpecifier];
+
+            if (envManager.isJailbroken) {
+                PSSpecifier *otaBlockingSpecifier = [PSSpecifier preferenceSpecifierNamed:DOLocalizedString(@"Settings_Block_OTA") target:self set:@selector(setOTABlockingEnabled:specifier:) get:@selector(readOTABlockingEnabled:) detail:nil cell:PSSwitchCell edit:nil];
+                [otaBlockingSpecifier setProperty:@YES forKey:@"enabled"];
+                [otaBlockingSpecifier setProperty:@"otaBlockingEnabled" forKey:@"key"];
+                [otaBlockingSpecifier setProperty:@NO forKey:@"default"];
+                [otaBlockingSpecifier setProperty:DOLocalizedString(@"Hint_Block_OTA") forKey:@"footerText"];
+                [specifiers addObject:otaBlockingSpecifier];
+            }
             
             if (!envManager.isJailbroken) {
                 PSSpecifier *verboseLogSpecifier = [PSSpecifier preferenceSpecifierNamed:DOLocalizedString(@"Settings_Verbose_Logs") target:self set:defSetter get:defGetter detail:nil cell:PSSwitchCell edit:nil];
@@ -540,6 +549,18 @@
     BOOL hidden = ((NSNumber *)value).boolValue;
     [self setPreferenceValue:value specifier:specifier];
     [[DOEnvironmentManager sharedManager] setJailbreakToolsHidden:hidden];
+}
+
+- (id)readOTABlockingEnabled:(PSSpecifier *)specifier
+{
+    return @([[DOEnvironmentManager sharedManager] isOTABlockingEnabled]);
+}
+
+- (void)setOTABlockingEnabled:(id)value specifier:(PSSpecifier *)specifier
+{
+    BOOL enabled = ((NSNumber *)value).boolValue;
+    [[DOEnvironmentManager sharedManager] setOTABlockingEnabled:enabled];
+    [self setPreferenceValue:@([[DOEnvironmentManager sharedManager] isOTABlockingEnabled) specifier:specifier];
 }
 
 - (id)readAppJITEnabled:(PSSpecifier *)specifier

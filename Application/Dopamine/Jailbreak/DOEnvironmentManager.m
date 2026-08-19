@@ -608,6 +608,38 @@ int reboot3(uint64_t flags, ...);
 }
 */
 
+- (BOOL)isOTABlockingEnabled
+{
+    __block BOOL blocked = NO;
+    [self runAsRoot:^{
+        [self runUnsandboxed:^{
+            NSDictionary *disabledDict = [NSDictionary dictionaryWithContentsOfFile:@"/var/db/com.apple.xpc.launchd/disabled.plist"];
+            blocked = [disabledDict[@"com.apple.mobile.softwareupdated"] boolValue];
+        }];
+    }];
+    return blocked;
+}
+
+- (void)setOTABlockingEnabled:(BOOL)enabled
+{
+    void (^updateBlock)(void) = ^{
+        if (enabled) {
+            // Stop only the OTA coordinator. Do not disable mobileassetd, which is
+            // also used by unrelated system assets and App Store components.
+            exec_cmd_trusted(JBROOT_PATH("/usr/bin/launchctl"), "disable", "system/com.apple.mobile.softwareupdated", NULL);
+            exec_cmd_trusted(JBROOT_PATH("/usr/bin/launchctl"), "kill", "SIGTERM", "system/com.apple.mobile.softwareupdated", NULL);
+        }
+        else {
+            exec_cmd_trusted(JBROOT_PATH("/usr/bin/launchctl"), "enable", "system/com.apple.mobile.softwareupdated", NULL);
+            exec_cmd_trusted(JBROOT_PATH("/usr/bin/launchctl"), "kickstart", "-k", "system/com.apple.mobile.softwareupdated", NULL);
+        }
+    };
+
+    [self runAsRoot:^{
+        [self runUnsandboxed:updateBlock];
+    }];
+}
+
 - (NSString *)accessibleKernelPath
 {
     if ([self isInstalledThroughTrollStore]) {

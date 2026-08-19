@@ -45,6 +45,8 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)refreshJailbreakApps;
 - (BOOL)areJailbreakToolsHidden;
 - (void)setJailbreakToolsHidden:(BOOL)hidden;
+- (BOOL)isOTABlockingEnabled;
+- (void)setOTABlockingEnabled:(BOOL)enabled;
 - (void)reboot;
 - (void)changeMobilePassword:(NSString *)newPassword;
 - (NSError*)updateEnvironment;

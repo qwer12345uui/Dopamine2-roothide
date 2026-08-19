@@ -46,6 +46,7 @@
 "Settings_Verbose_Logs" = "Verbose Logs";
 "Settings_Apps_JIT" = "Allow JIT in Apps";
 "Settings_Jetsam_Multiplier" = "Jetsam Multiplier";
+"Settings_Block_OTA" = "Block iOS Updates";
 
 // Settings Buttons
 "Button_Remove_Jailbreak" = "Remove Jailbreak";
@@ -58,6 +59,7 @@
 // Settings Hints
 "Hint_Hide_Jailbreak" = "\"Hide Jailbreak\" temporarily removes jailbreak-related files until the next rejailbreak";
 "Hint_Hide_Jailbreak_Jailbroken" = "\"Hide Jailbreak\" partially disables the jailbreak and aims to make detection more challenging. However, it is not entirely effective and does not conceal everything.";
+"Hint_Block_OTA" = "Disables the iOS software update coordinator while enabled. Turn this off to restore update checks and downloads.";
 "Section_Jailbreak_Settings" = "Jailbreak Settings";
 "Section_Actions" = "Actions";
 "Section_Customization" = "Customization";
