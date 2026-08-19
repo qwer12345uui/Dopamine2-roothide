@@ -560,7 +560,7 @@
 {
     BOOL enabled = ((NSNumber *)value).boolValue;
     [[DOEnvironmentManager sharedManager] setOTABlockingEnabled:enabled];
-    [self setPreferenceValue:@([[DOEnvironmentManager sharedManager] isOTABlockingEnabled) specifier:specifier];
+    [self setPreferenceValue:@([[DOEnvironmentManager sharedManager] isOTABlockingEnabled]) specifier:specifier];
 }
 
 - (id)readAppJITEnabled:(PSSpecifier *)specifier
