@@ -11,6 +11,7 @@
 #import <pthread.h>
 
 NSString * const DOWallpaperDidChangeNotification = @"DOWallpaperDidChangeNotification";
+NSString * const DOBootLogoDidChangeNotification = @"DOBootLogoDidChangeNotification";
 
 @implementation DOUIManager
 

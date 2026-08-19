@@ -50,6 +50,7 @@ NS_ASSUME_NONNULL_BEGIN
 @end
 
 FOUNDATION_EXPORT NSString * const DOWallpaperDidChangeNotification;
+FOUNDATION_EXPORT NSString * const DOBootLogoDidChangeNotification;
 NSString *DOLocalizedString(NSString *string);
 
 NS_ASSUME_NONNULL_END

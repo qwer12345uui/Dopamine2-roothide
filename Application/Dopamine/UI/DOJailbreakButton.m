@@ -143,6 +143,24 @@
 - (void)setupTitle
 {
     UIWindow *window = [[UIApplication sharedApplication] keyWindow];
+    CGFloat titleTopOffset = 20.0;
+    UIImage *customBootLogo = [UIImage imageWithContentsOfFile:[DOUIManager sharedInstance].bootlogoPath];
+    if (customBootLogo) {
+        UIImageView *bootLogoView = [[UIImageView alloc] initWithImage:customBootLogo];
+        bootLogoView.contentMode = UIViewContentModeScaleAspectFit;
+        bootLogoView.translatesAutoresizingMaskIntoConstraints = NO;
+        [self addSubview:bootLogoView];
+
+        CGFloat aspect = customBootLogo.size.height > 0 ? customBootLogo.size.width / customBootLogo.size.height : 1.0;
+        aspect = MIN(MAX(aspect, 0.5), 4.0);
+        [NSLayoutConstraint activateConstraints:@[
+            [bootLogoView.centerXAnchor constraintEqualToAnchor:window.centerXAnchor],
+            [bootLogoView.topAnchor constraintEqualToAnchor:self.topAnchor constant:14],
+            [bootLogoView.heightAnchor constraintEqualToConstant:42],
+            [bootLogoView.widthAnchor constraintEqualToConstant:42 * aspect],
+        ]];
+        titleTopOffset = 66.0;
+    }
 
     UILabel *titleLabel = [[UILabel alloc] init];
     titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
@@ -155,7 +173,7 @@
 
     [NSLayoutConstraint activateConstraints:@[
         [titleLabel.centerXAnchor constraintEqualToAnchor:window.centerXAnchor constant:20],
-        [titleLabel.topAnchor constraintEqualToAnchor:self.topAnchor constant:20],
+        [titleLabel.topAnchor constraintEqualToAnchor:self.topAnchor constant:titleTopOffset],
     ]];
 
     [UIView animateWithDuration:0.2 animations:^{

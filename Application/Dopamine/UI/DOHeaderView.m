@@ -11,6 +11,7 @@
 @interface DOHeaderView ()
 
 @property (nonatomic) UIImageView *logoView;
+@property (nonatomic) NSLayoutConstraint *logoAspectConstraint;
 
 @end
 
@@ -37,11 +38,13 @@
         self.logoView = [[UIImageView alloc] init];
         self.logoView.translatesAutoresizingMaskIntoConstraints = NO;
         self.logoView.image = [image imageWithAlignmentRectInsets:UIEdgeInsetsMake(7, 0, -7, 0)];
+        self.logoView.contentMode = UIViewContentModeScaleAspectFit;
         [stackView addArrangedSubview:self.logoView];
 
+        self.logoAspectConstraint = [self.logoView.widthAnchor constraintEqualToAnchor:self.logoView.heightAnchor multiplier:[self logoAspectForImage:image]];
         [NSLayoutConstraint activateConstraints:@[
             [self.logoView.heightAnchor constraintEqualToConstant:40],
-            [self.logoView.widthAnchor constraintEqualToAnchor:self.logoView.heightAnchor multiplier:image.size.width / image.size.height],
+            self.logoAspectConstraint,
         ]];
 
         //3 - Add our subtitles to our stack
@@ -65,6 +68,21 @@
 
     }
     return self;
+}
+
+- (CGFloat)logoAspectForImage:(UIImage *)image
+{
+    if (!image || image.size.width <= 0 || image.size.height <= 0) return 1.0;
+    return MIN(MAX(image.size.width / image.size.height, 0.5), 4.0);
+}
+
+- (void)setLogoImage:(UIImage *)image
+{
+    if (!image) return;
+    self.logoView.image = [image imageWithAlignmentRectInsets:UIEdgeInsetsMake(7, 0, -7, 0)];
+    [NSLayoutConstraint deactivateConstraints:@[self.logoAspectConstraint]];
+    self.logoAspectConstraint = [self.logoView.widthAnchor constraintEqualToAnchor:self.logoView.heightAnchor multiplier:[self logoAspectForImage:image]];
+    self.logoAspectConstraint.active = YES;
 }
 
 @end

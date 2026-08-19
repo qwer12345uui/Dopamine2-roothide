@@ -221,14 +221,6 @@
             [tweakInjectionSpecifier setProperty:@YES forKey:@"default"];
             [specifiers addObject:tweakInjectionSpecifier];
 
-            if (envManager.isJailbroken) {
-                PSSpecifier *otaBlockingSpecifier = [PSSpecifier preferenceSpecifierNamed:DOLocalizedString(@"Settings_Block_OTA") target:self set:@selector(setOTABlockingEnabled:specifier:) get:@selector(readOTABlockingEnabled:) detail:nil cell:PSSwitchCell edit:nil];
-                [otaBlockingSpecifier setProperty:@YES forKey:@"enabled"];
-                [otaBlockingSpecifier setProperty:@"otaBlockingEnabled" forKey:@"key"];
-                [otaBlockingSpecifier setProperty:@NO forKey:@"default"];
-                [otaBlockingSpecifier setProperty:DOLocalizedString(@"Hint_Block_OTA") forKey:@"footerText"];
-                [specifiers addObject:otaBlockingSpecifier];
-            }
             
             if (!envManager.isJailbroken) {
                 PSSpecifier *verboseLogSpecifier = [PSSpecifier preferenceSpecifierNamed:DOLocalizedString(@"Settings_Verbose_Logs") target:self set:defSetter get:defGetter detail:nil cell:PSSwitchCell edit:nil];
@@ -297,6 +289,13 @@
                     [hideToolsSpecifier setProperty:@NO forKey:@"default"];
                     [hideToolsSpecifier setProperty:DOLocalizedString(@"Hint_Hide_Jailbreak_Jailbroken") forKey:@"footerText"];
                     [specifiers addObject:hideToolsSpecifier];
+
+                    PSSpecifier *otaBlockingSpecifier = [PSSpecifier preferenceSpecifierNamed:DOLocalizedString(@"Settings_Block_OTA") target:self set:@selector(setOTABlockingEnabled:specifier:) get:@selector(readOTABlockingEnabled:) detail:nil cell:PSSwitchCell edit:nil];
+                    [otaBlockingSpecifier setProperty:@YES forKey:@"enabled"];
+                    [otaBlockingSpecifier setProperty:@"otaBlockingEnabled" forKey:@"key"];
+                    [otaBlockingSpecifier setProperty:@NO forKey:@"default"];
+                    [otaBlockingSpecifier setProperty:DOLocalizedString(@"Hint_Block_OTA") forKey:@"footerText"];
+                    [specifiers addObject:otaBlockingSpecifier];
 
                     PSSpecifier *changeMobilePasswordSpecifier = [PSSpecifier emptyGroupSpecifier];
                     changeMobilePasswordSpecifier.target = self;
@@ -518,8 +517,11 @@
         UIGraphicsEndImageContext();
         if (self.selectingBootLogo) {
             NSData *data = UIImagePNGRepresentation(normalizedImage);
-            if (data.length > 0 && [data writeToFile:[DOUIManager sharedInstance].bootlogoPath atomically:YES] && [DOEnvironmentManager sharedManager].isJailbroken) {
-                [[DOEnvironmentManager sharedManager] updateBootLogo];
+            if (data.length > 0 && [data writeToFile:[DOUIManager sharedInstance].bootlogoPath atomically:YES]) {
+                if ([DOEnvironmentManager sharedManager].isJailbroken) {
+                    [[DOEnvironmentManager sharedManager] updateBootLogo];
+                }
+                [[NSNotificationCenter defaultCenter] postNotificationName:DOBootLogoDidChangeNotification object:nil];
             }
         }
         else {

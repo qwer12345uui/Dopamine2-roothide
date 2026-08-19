@@ -23,6 +23,7 @@
 @property DOActionMenuButton *updateButton;
 @property(nonatomic) BOOL hideStatusBar;
 @property(nonatomic) BOOL hideHomeIndicator;
+@property(nonatomic) DOHeaderView *headerView;
 
 @end
 
@@ -31,6 +32,13 @@
 - (void)viewDidLoad {
     [super viewDidLoad];
     [self setupStack];
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(reloadBootLogo) name:DOBootLogoDidChangeNotification object:nil];
+}
+
+- (void)reloadBootLogo
+{
+    UIImage *customBootLogo = [UIImage imageWithContentsOfFile:[DOUIManager sharedInstance].bootlogoPath];
+    [self.headerView setLogoImage:(customBootLogo ?: [UIImage imageNamed:@"Dopamine"])];
 }
 
 -(void)setupStack
@@ -73,16 +81,17 @@
     }
 
     //Header
-    DOHeaderView *headerView = [[DOHeaderView alloc] initWithImage: [UIImage imageNamed:@"Dopamine"] subtitles: @[
+    UIImage *customBootLogo = [UIImage imageWithContentsOfFile:[DOUIManager sharedInstance].bootlogoPath];
+    self.headerView = [[DOHeaderView alloc] initWithImage:(customBootLogo ?: [UIImage imageNamed:@"Dopamine"]) subtitles: @[
         [DOGlobalAppearance mainSubtitleString:[[DOEnvironmentManager sharedManager] versionSupportString]],
         [DOGlobalAppearance secondarySubtitleString:DOLocalizedString(@"Credits_Made_By")],
     ]];
     
-    [stackView addArrangedSubview:headerView];
+    [stackView addArrangedSubview:self.headerView];
 
     [NSLayoutConstraint activateConstraints:@[
-        [headerView.leadingAnchor constraintEqualToAnchor:stackView.leadingAnchor constant:5],
-        [headerView.trailingAnchor constraintEqualToAnchor:stackView.trailingAnchor]
+        [self.headerView.leadingAnchor constraintEqualToAnchor:stackView.leadingAnchor constant:5],
+        [self.headerView.trailingAnchor constraintEqualToAnchor:stackView.trailingAnchor]
     ]];
     
     //Action Menu
