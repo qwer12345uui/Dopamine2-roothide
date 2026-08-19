@@ -85,4 +85,9 @@
     self.logoAspectConstraint.active = YES;
 }
 
+- (void)setLogoHidden:(BOOL)hidden
+{
+    self.logoView.hidden = hidden;
+}
+
 @end

@@ -11,12 +11,43 @@
 #import "DOEnvironmentManager.h"
 #import <libjailbreak/info.h>
 #import <libjailbreak/jbclient_xpc.h>
+#import <libjailbreak/util.h>
+
+static BOOL otaUpdatesAreBlocked(void)
+{
+    NSDictionary *disabledDict = [NSDictionary dictionaryWithContentsOfFile:@"/var/db/com.apple.xpc.launchd/disabled.plist"];
+    return [disabledDict[@"com.apple.mobile.softwareupdated"] boolValue];
+}
+
+static int setOTAUpdatesBlocked(BOOL blocked)
+{
+    const char *launchctl = "/bin/launchctl";
+    int result = blocked ? exec_cmd(launchctl, "disable", "system/com.apple.mobile.softwareupdated", NULL) : exec_cmd(launchctl, "enable", "system/com.apple.mobile.softwareupdated", NULL);
+    if (result == 0) {
+        if (blocked) {
+            exec_cmd(launchctl, "kill", "SIGTERM", "system/com.apple.mobile.softwareupdated", NULL);
+        }
+        else {
+            exec_cmd(launchctl, "kickstart", "-k", "system/com.apple.mobile.softwareupdated", NULL);
+        }
+    }
+    return result;
+}
 
 int main(int argc, char * argv[]) {
     if (argc >= 3) {
         if (!strcmp(argv[1], "trollstore")) {
             if (!strcmp(argv[2], "delete-bootstrap")) {
                 [[DOEnvironmentManager sharedManager] deleteBootstrap];
+            }
+            else if (!strcmp(argv[2], "ota-status")) {
+                return otaUpdatesAreBlocked() ? 0 : 1;
+            }
+            else if (!strcmp(argv[2], "ota-block")) {
+                return setOTAUpdatesBlocked(YES);
+            }
+            else if (!strcmp(argv[2], "ota-unblock")) {
+                return setOTAUpdatesBlocked(NO);
             }
 /*
             else if (!strcmp(argv[2], "hide-jailbreak")) {

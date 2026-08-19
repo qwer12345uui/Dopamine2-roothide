@@ -44,6 +44,7 @@
 "Settings_Apps_JIT" = "允许 App 使用 JIT";
 "Settings_Jetsam_Multiplier" = "Jetsam 倍数";
 "Settings_Block_OTA" = "屏蔽 iOS 更新";
+"Section_Software_Update" = "软件更新";
 
 // Settings Buttons
 "Button_Remove_Jailbreak" = "移除越狱";
@@ -57,6 +58,7 @@
 "Hint_Hide_Jailbreak" = "“隐藏越狱” 将在下次越狱前移除部分可能导致越狱检测的文件。";
 "Hint_Hide_Jailbreak_Jailbroken" = "“隐藏越狱” 将禁用部分越狱功能以提升检测越狱的难度，不过这并不能完全防止应用检测到越狱。";
 "Hint_Block_OTA" = "启用后会禁用 iOS 软件更新服务。关闭此开关即可恢复系统更新检查和下载。";
+"Hint_Block_OTA_Unavailable" = "请通过 TrollStore 安装此应用，或先激活越狱后再修改 iOS 更新服务。";
 "Section_Jailbreak_Settings" = "越狱设置";
 "Section_Actions" = "操作";
 "Section_Customization" = "自定义";
@@ -120,3 +122,7 @@
 "Custom_Wallpaper" = "自定义壁纸";
 "Select_Wallpaper" = "选择壁纸";
 "Select_Boot_Logo" = "选择启动图标";
+"Section_Boot_Logo" = "BOOT LOGO";
+"Boot_Logo_Enabled" = "Enabled";
+"Custom_Boot_Logo" = "Custom Boot Logo";
+"Select_Image" = "Select Image";

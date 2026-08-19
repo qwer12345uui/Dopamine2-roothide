@@ -250,6 +250,17 @@
             [jetsamSpecifier setProperty:@"jetsamOptionNumbers" forKey:@"valuesDataSource"];
             [jetsamSpecifier setProperty:@"jetsamOptionTitles" forKey:@"titlesDataSource"];
             [specifiers addObject:jetsamSpecifier];
+
+            PSSpecifier *softwareUpdateGroupSpecifier = [PSSpecifier emptyGroupSpecifier];
+            softwareUpdateGroupSpecifier.name = DOLocalizedString(@"Section_Software_Update");
+            [specifiers addObject:softwareUpdateGroupSpecifier];
+
+            PSSpecifier *otaBlockingSpecifier = [PSSpecifier preferenceSpecifierNamed:DOLocalizedString(@"Settings_Block_OTA") target:self set:@selector(setOTABlockingEnabled:specifier:) get:@selector(readOTABlockingEnabled:) detail:nil cell:PSSwitchCell edit:nil];
+            [otaBlockingSpecifier setProperty:@(envManager.canControlOTABlocking) forKey:@"enabled"];
+            [otaBlockingSpecifier setProperty:@"otaBlockingEnabled" forKey:@"key"];
+            [otaBlockingSpecifier setProperty:@NO forKey:@"default"];
+            [otaBlockingSpecifier setProperty:DOLocalizedString(envManager.canControlOTABlocking ? @"Hint_Block_OTA" : @"Hint_Block_OTA_Unavailable") forKey:@"footerText"];
+            [specifiers addObject:otaBlockingSpecifier];
             
             if (@available(iOS 16.0, *)) {
                 if (envManager.isJailbroken && !jbclient_jbsettings_get_bool("DevMode")) {
@@ -289,13 +300,6 @@
                     [hideToolsSpecifier setProperty:@NO forKey:@"default"];
                     [hideToolsSpecifier setProperty:DOLocalizedString(@"Hint_Hide_Jailbreak_Jailbroken") forKey:@"footerText"];
                     [specifiers addObject:hideToolsSpecifier];
-
-                    PSSpecifier *otaBlockingSpecifier = [PSSpecifier preferenceSpecifierNamed:DOLocalizedString(@"Settings_Block_OTA") target:self set:@selector(setOTABlockingEnabled:specifier:) get:@selector(readOTABlockingEnabled:) detail:nil cell:PSSwitchCell edit:nil];
-                    [otaBlockingSpecifier setProperty:@YES forKey:@"enabled"];
-                    [otaBlockingSpecifier setProperty:@"otaBlockingEnabled" forKey:@"key"];
-                    [otaBlockingSpecifier setProperty:@NO forKey:@"default"];
-                    [otaBlockingSpecifier setProperty:DOLocalizedString(@"Hint_Block_OTA") forKey:@"footerText"];
-                    [specifiers addObject:otaBlockingSpecifier];
 
                     PSSpecifier *changeMobilePasswordSpecifier = [PSSpecifier emptyGroupSpecifier];
                     changeMobilePasswordSpecifier.target = self;
@@ -388,11 +392,27 @@
         [selectWallpaperSpecifier setProperty:@"selectCustomWallpaperPressed" forKey:@"action"];
         [specifiers addObject:selectWallpaperSpecifier];
 
+        PSSpecifier *bootLogoGroupSpecifier = [PSSpecifier emptyGroupSpecifier];
+        bootLogoGroupSpecifier.name = DOLocalizedString(@"Section_Boot_Logo");
+        [specifiers addObject:bootLogoGroupSpecifier];
+
+        PSSpecifier *bootLogoEnabledSpecifier = [PSSpecifier preferenceSpecifierNamed:DOLocalizedString(@"Boot_Logo_Enabled") target:self set:@selector(setBootLogoEnabled:specifier:) get:defGetter detail:nil cell:PSSwitchCell edit:nil];
+        [bootLogoEnabledSpecifier setProperty:@YES forKey:@"enabled"];
+        [bootLogoEnabledSpecifier setProperty:@"bootLogoEnabled" forKey:@"key"];
+        [bootLogoEnabledSpecifier setProperty:@YES forKey:@"default"];
+        [specifiers addObject:bootLogoEnabledSpecifier];
+
+        PSSpecifier *customBootLogoSpecifier = [PSSpecifier preferenceSpecifierNamed:DOLocalizedString(@"Custom_Boot_Logo") target:self set:@selector(setCustomBootLogoEnabled:specifier:) get:defGetter detail:nil cell:PSSwitchCell edit:nil];
+        [customBootLogoSpecifier setProperty:@YES forKey:@"enabled"];
+        [customBootLogoSpecifier setProperty:@"customBootLogoEnabled" forKey:@"key"];
+        [customBootLogoSpecifier setProperty:@NO forKey:@"default"];
+        [specifiers addObject:customBootLogoSpecifier];
+
         PSSpecifier *selectBootLogoSpecifier = [PSSpecifier emptyGroupSpecifier];
         selectBootLogoSpecifier.target = self;
-        [selectBootLogoSpecifier setProperty:DOLocalizedString(@"Select_Boot_Logo") forKey:@"title"];
+        [selectBootLogoSpecifier setProperty:DOLocalizedString(@"Select_Image") forKey:@"title"];
         [selectBootLogoSpecifier setProperty:@"DOButtonCell" forKey:@"headerCellClass"];
-        [selectBootLogoSpecifier setProperty:@"power" forKey:@"image"];
+        [selectBootLogoSpecifier setProperty:@"photo" forKey:@"image"];
         [selectBootLogoSpecifier setProperty:@"selectCustomBootLogoPressed" forKey:@"action"];
         [specifiers addObject:selectBootLogoSpecifier];
         
@@ -470,6 +490,24 @@
     [[NSNotificationCenter defaultCenter] postNotificationName:DOWallpaperDidChangeNotification object:nil];
 }
 
+- (void)setBootLogoEnabled:(id)value specifier:(PSSpecifier *)specifier
+{
+    [self setPreferenceValue:value specifier:specifier];
+    if ([DOEnvironmentManager sharedManager].isJailbroken) {
+        [[DOEnvironmentManager sharedManager] updateBootLogo];
+    }
+    [[NSNotificationCenter defaultCenter] postNotificationName:DOBootLogoDidChangeNotification object:nil];
+}
+
+- (void)setCustomBootLogoEnabled:(id)value specifier:(PSSpecifier *)specifier
+{
+    [self setPreferenceValue:value specifier:specifier];
+    if ([DOEnvironmentManager sharedManager].isJailbroken) {
+        [[DOEnvironmentManager sharedManager] updateBootLogo];
+    }
+    [[NSNotificationCenter defaultCenter] postNotificationName:DOBootLogoDidChangeNotification object:nil];
+}
+
 - (void)selectCustomWallpaperPressed
 {
     self.selectingBootLogo = NO;
@@ -518,10 +556,12 @@
         if (self.selectingBootLogo) {
             NSData *data = UIImagePNGRepresentation(normalizedImage);
             if (data.length > 0 && [data writeToFile:[DOUIManager sharedInstance].bootlogoPath atomically:YES]) {
+                [[DOPreferenceManager sharedManager] setPreferenceValue:@YES forKey:@"customBootLogoEnabled"];
                 if ([DOEnvironmentManager sharedManager].isJailbroken) {
                     [[DOEnvironmentManager sharedManager] updateBootLogo];
                 }
                 [[NSNotificationCenter defaultCenter] postNotificationName:DOBootLogoDidChangeNotification object:nil];
+                [self reloadSpecifiers];
             }
         }
         else {

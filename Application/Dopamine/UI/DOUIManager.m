@@ -250,6 +250,18 @@ NSString * const DOBootLogoDidChangeNotification = @"DOBootLogoDidChangeNotifica
     [_preferenceManager setPreferenceValue:pkgManagers forKey:@"enabledPkgManagers"];
 }
 
+- (BOOL)isBootLogoEnabled
+{
+    id value = [[DOPreferenceManager sharedManager] preferenceValueForKey:@"bootLogoEnabled"];
+    return value ? [value boolValue] : YES;
+}
+
+- (BOOL)isCustomBootLogoEnabled
+{
+    id value = [[DOPreferenceManager sharedManager] preferenceValueForKey:@"customBootLogoEnabled"];
+    return value ? [value boolValue] : NO;
+}
+
 - (BOOL)isDebug
 {
     NSNumber *debug = [_preferenceManager preferenceValueForKey:@"verboseLogsEnabled"];

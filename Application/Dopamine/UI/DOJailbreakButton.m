@@ -144,7 +144,8 @@
 {
     UIWindow *window = [[UIApplication sharedApplication] keyWindow];
     CGFloat titleTopOffset = 20.0;
-    UIImage *customBootLogo = [UIImage imageWithContentsOfFile:[DOUIManager sharedInstance].bootlogoPath];
+    DOUIManager *uiManager = [DOUIManager sharedInstance];
+    UIImage *customBootLogo = (uiManager.isBootLogoEnabled && uiManager.isCustomBootLogoEnabled) ? [UIImage imageWithContentsOfFile:uiManager.bootlogoPath] : nil;
     if (customBootLogo) {
         UIImageView *bootLogoView = [[UIImageView alloc] initWithImage:customBootLogo];
         bootLogoView.contentMode = UIViewContentModeScaleAspectFit;

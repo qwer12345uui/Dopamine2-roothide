@@ -37,8 +37,10 @@
 
 - (void)reloadBootLogo
 {
-    UIImage *customBootLogo = [UIImage imageWithContentsOfFile:[DOUIManager sharedInstance].bootlogoPath];
+    DOUIManager *uiManager = [DOUIManager sharedInstance];
+    UIImage *customBootLogo = uiManager.isCustomBootLogoEnabled ? [UIImage imageWithContentsOfFile:uiManager.bootlogoPath] : nil;
     [self.headerView setLogoImage:(customBootLogo ?: [UIImage imageNamed:@"Dopamine"])];
+    [self.headerView setLogoHidden:!uiManager.isBootLogoEnabled];
 }
 
 -(void)setupStack
@@ -81,8 +83,7 @@
     }
 
     //Header
-    UIImage *customBootLogo = [UIImage imageWithContentsOfFile:[DOUIManager sharedInstance].bootlogoPath];
-    self.headerView = [[DOHeaderView alloc] initWithImage:(customBootLogo ?: [UIImage imageNamed:@"Dopamine"]) subtitles: @[
+    self.headerView = [[DOHeaderView alloc] initWithImage:[UIImage imageNamed:@"Dopamine"] subtitles: @[
         [DOGlobalAppearance mainSubtitleString:[[DOEnvironmentManager sharedManager] versionSupportString]],
         [DOGlobalAppearance secondarySubtitleString:DOLocalizedString(@"Credits_Made_By")],
     ]];
@@ -93,6 +94,7 @@
         [self.headerView.leadingAnchor constraintEqualToAnchor:stackView.leadingAnchor constant:5],
         [self.headerView.trailingAnchor constraintEqualToAnchor:stackView.trailingAnchor]
     ]];
+    [self reloadBootLogo];
     
     //Action Menu
     DOActionMenuView *actionView = [[DOActionMenuView alloc] initWithActions:@[

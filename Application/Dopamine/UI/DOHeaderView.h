@@ -13,6 +13,7 @@ NS_ASSUME_NONNULL_BEGIN
 
 -(id)initWithImage:(UIImage *)image subtitles:(NSArray<NSAttributedString *> *)subtitles;
 - (void)setLogoImage:(UIImage *)image;
+- (void)setLogoHidden:(BOOL)hidden;
 
 @end
 

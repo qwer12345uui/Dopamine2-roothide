@@ -45,6 +45,7 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)refreshJailbreakApps;
 - (BOOL)areJailbreakToolsHidden;
 - (void)setJailbreakToolsHidden:(BOOL)hidden;
+- (BOOL)canControlOTABlocking;
 - (BOOL)isOTABlockingEnabled;
 - (void)setOTABlockingEnabled:(BOOL)enabled;
 - (void)reboot;

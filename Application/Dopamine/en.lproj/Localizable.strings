@@ -47,6 +47,7 @@
 "Settings_Apps_JIT" = "Allow JIT in Apps";
 "Settings_Jetsam_Multiplier" = "Jetsam Multiplier";
 "Settings_Block_OTA" = "Block iOS Updates";
+"Section_Software_Update" = "Software Update";
 
 // Settings Buttons
 "Button_Remove_Jailbreak" = "Remove Jailbreak";
@@ -60,6 +61,7 @@
 "Hint_Hide_Jailbreak" = "\"Hide Jailbreak\" temporarily removes jailbreak-related files until the next rejailbreak";
 "Hint_Hide_Jailbreak_Jailbroken" = "\"Hide Jailbreak\" partially disables the jailbreak and aims to make detection more challenging. However, it is not entirely effective and does not conceal everything.";
 "Hint_Block_OTA" = "Disables the iOS software update coordinator while enabled. Turn this off to restore update checks and downloads.";
+"Hint_Block_OTA_Unavailable" = "Install with TrollStore or activate the jailbreak before changing the iOS update service.";
 "Section_Jailbreak_Settings" = "Jailbreak Settings";
 "Section_Actions" = "Actions";
 "Section_Customization" = "Customization";
@@ -123,3 +125,7 @@
 "Custom_Wallpaper" = "Custom Wallpaper";
 "Select_Wallpaper" = "Select Wallpaper";
 "Select_Boot_Logo" = "Select Boot Logo";
+"Section_Boot_Logo" = "BOOT LOGO";
+"Boot_Logo_Enabled" = "Enabled";
+"Custom_Boot_Logo" = "Custom Boot Logo";
+"Select_Image" = "Select Image";

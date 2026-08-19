@@ -621,8 +621,18 @@ int reboot3(uint64_t flags, ...);
 }
 */
 
+- (BOOL)canControlOTABlocking
+{
+    return [self isJailbroken] || [self isInstalledThroughTrollStore];
+}
+
 - (BOOL)isOTABlockingEnabled
 {
+    if (![self canControlOTABlocking]) return NO;
+    if (![self isJailbroken] && [self isInstalledThroughTrollStore]) {
+        return [self runTrollStoreAction:@"ota-status"] == 0;
+    }
+
     __block BOOL blocked = NO;
     [self runAsRoot:^{
         [self runUnsandboxed:^{
@@ -635,6 +645,12 @@ int reboot3(uint64_t flags, ...);
 
 - (void)setOTABlockingEnabled:(BOOL)enabled
 {
+    if (![self canControlOTABlocking]) return;
+    if (![self isJailbroken] && [self isInstalledThroughTrollStore]) {
+        [self runTrollStoreAction:(enabled ? @"ota-block" : @"ota-unblock")];
+        return;
+    }
+
     void (^updateBlock)(void) = ^{
         if (enabled) {
             // Stop only the OTA coordinator. Do not disable mobileassetd, which is
@@ -771,7 +787,8 @@ int reboot3(uint64_t flags, ...);
 
 - (NSError *)updateBootLogo
 {
-    UIImage *bootLogoImage = [UIImage imageWithContentsOfFile:[DOUIManager sharedInstance].bootlogoPath];
+    DOUIManager *uiManager = [DOUIManager sharedInstance];
+    UIImage *bootLogoImage = (uiManager.isBootLogoEnabled && uiManager.isCustomBootLogoEnabled) ? [UIImage imageWithContentsOfFile:uiManager.bootlogoPath] : nil;
     const char *destinationPath = JBROOT_PATH("/basebin/bootlogo.jp2");
 
     if (!bootLogoImage) {
