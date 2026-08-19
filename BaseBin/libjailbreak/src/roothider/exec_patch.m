@@ -20,8 +20,14 @@ void event_handler(int kq)
     {
         struct kevent event = {0};
         int ret = kevent(kq, NULL, 0, &event, 1, NULL);
-        assert(ret == 1);
-        assert(event.filter == EVFILT_PROC);
+        if (ret != 1) {
+            JBLogError("[execPatch] kevent receive failed: %d", ret);
+            continue;
+        }
+        if (event.filter != EVFILT_PROC) {
+            JBLogError("[execPatch] unexpected kevent filter: %d", event.filter);
+            continue;
+        }
 
         pid_t pid = (pid_t)event.ident;
 
@@ -81,19 +87,32 @@ int spawnExecPatchAdd(int pid, bool resume)
 {
     initExecPatch();
 
+    /*
+     * The app can exec immediately after jailbreakd accepts this request. Keep
+     * the resume record visible before registering NOTE_EXEC; otherwise the
+     * event queue can observe a process with no record and leave it suspended.
+     */
+    __block bool inserted = false;
+    dispatch_sync(gExecPatchDataQueue, ^{
+        if([gExecPatchArray objectForKey:@(pid)] != nil) {
+            JBLogError("[spawnExecPatchAdd] already has record for process: %d", pid);
+            return;
+        }
+        [gExecPatchArray setObject:@(resume) forKey:@(pid)];
+        inserted = true;
+    });
+    if (!inserted) return -1;
+
     struct kevent kev;
     EV_SET(&kev, pid, EVFILT_PROC, EV_ADD | EV_ENABLE | EV_ONESHOT, NOTE_EXEC|NOTE_EXIT, 0, NULL);
     if (kevent(kq, &kev, 1, NULL, 0, NULL) == -1) {
         JBLogError("add kevent failed for pid: %d", pid);
+        dispatch_sync(gExecPatchDataQueue, ^{
+            [gExecPatchArray removeObjectForKey:@(pid)];
+        });
         return -1;
     }
 
-    dispatch_async(gExecPatchDataQueue, ^{
-        if([gExecPatchArray objectForKey:@(pid)] != nil) {
-            JBLogError("[spawnExecPatchAdd] already has record for process: %d", pid);
-        }
-        [gExecPatchArray setObject:@(resume) forKey:@(pid)];
-    });
     return 0;
 }
 

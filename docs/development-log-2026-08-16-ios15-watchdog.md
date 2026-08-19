@@ -162,3 +162,19 @@ Boot Logo 设置界面继续提供参考图所示的 **Enabled**、**Custom Boot
 这项防护不尝试关闭、杀死、节流或注入 Apple 的 `aggregated` 守护进程，也不改变 `launchd`、`watchdogd`、`jailbreakd` 与安装服务的启动路径。它仅移除 iOS 15 恢复窗口中的一项非必要、全局且同步的 LaunchServices 工作，以降低以后安装/更新完成、首次启动或 userspace reboot 后出现 CoreServices/Powerlog CPU 峰值并放大 SpringBoard 看门狗的概率。`.disable_startup_uicache` 同时提供跨版本的显式禁用开关；正常 iOS 15 用户无需创建任何标记文件。
 
 IPA 回归脚本已检查启动期判定函数、iOS 15 显式回退标记和跳过日志文本，防止未来合并时重新引入无条件启动期全量刷新。该优化降低已知可控触发源，不能承诺消除 Apple 内核、Powerlog 或第三方 App 自身导致的所有 CPU 异常；仍须通过真机连续安装、覆盖更新、重新越狱和首次启动验证。
+
+## 追加调查九：越狱工具类 App 的首次启动与 exec 补丁队列
+
+用户补充的受影响样本包括 Filza、Zleaner Pro、KrashKop、Patcher、RootHide、Sileo 与 TrollSpeed。它们不应被简单归为同一个 bundle identifier 或同一个第三方 tweak；共同特征是会在首次前台启动或安装/更新后的初始化中启动辅助可执行文件、调用 `execve`/`POSIX_SPAWN_SETEXEC`，或进行软件包、文件、补丁、网络和越狱环境检查。该模式与普通只显示 UI 的 App 相比，更频繁经过 `systemhook` 的 exec 补丁队列。
+
+审计发现 `spawnExecPatchAdd` 的旧顺序先注册 `NOTE_EXEC` kevent、再使用异步队列写入 pid→resume 记录。工具 App 的辅助进程可以在记录可见前立即 exec；此时事件线程取得无记录的 pid，旧代码还依赖断言处理异常 kevent。结果可能是补丁没有与恢复信号配对，或 jailbreakd 的事件处理路径异常，使后续启动期同步 RPC 堆积并放大为 SpringBoard/watchdog 的长时间恢复。
+
+本轮将记录写入改为同步且位于 kevent 注册之前；若注册失败，立即同步回滚记录。事件循环将 kevent 读取错误和非 `EVFILT_PROC` 事件记录为可恢复错误，而不再依赖断言。该修复的范围是**所有通过 `POSIX_SPAWN_SETEXEC` 执行辅助命令的 RootHide 注入进程**，因此可覆盖这类工具 App 的包管理、清理、文件操作和检测辅助路径，不依赖猜测或硬编码每个 App 名称。
+
+| 风险点 | 修复后行为 | 兼容性影响 |
+| --- | --- | --- |
+| pid 的 NOTE_EXEC 先于 resume 记录到达 | 注册前同步保存记录。 | 进程仍按原有 RootHide 补丁和 resume 逻辑运行，不跳过必要代码签名或 dyld 处理。 |
+| kevent 注册失败 | 同步移除预先建立的记录并向调用方返回错误。 | 不留下会误匹配未来 pid 的陈旧状态。 |
+| 异常 kevent | 记录并继续等待后续事件。 | 避免辅助队列因为断言终止，降低启动期后续 RPC 失配。 |
+
+该修复与 iOS 15 自动 `uicache` 收敛、IOSurface 刷新默认关闭、安装服务隔离和 CommCenter 单进程降级互补；它不通过全局关闭 `launchd`、`watchdogd`、TweakInject 或系统守护进程来掩盖问题，因此不重复 `d2fc847` 的越狱启动失败风险。视频未成功上传不会阻碍本次代码级竞态修复；若问题仍复现，后续需要同一时段的 `jailbreakd`、`launchd`、SpringBoard 和 watchdog 日志以确认是否还有未覆盖的同步 RPC 路径。

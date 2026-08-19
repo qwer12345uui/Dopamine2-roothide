@@ -100,5 +100,7 @@ grep -Fq 'shouldFilterSpringBoardThirdPartyInserts' BaseBin/systemhook/src/commo
 grep -Fq '.enable_springboard_tweaks_ios15' BaseBin/systemhook/src/common.c
 grep -Fq 'Safe mode must not inherit a third-party SpringBoard loader' BaseBin/systemhook/src/common.c
 grep -Fq 'memchr(inputStruct' BaseBin/watchdoghook/src/main.m
+grep -Fq 'event queue can observe a process with no record and leave it suspended.' BaseBin/libjailbreak/src/roothider/exec_patch.m
+grep -Fq '[execPatch] kevent receive failed' BaseBin/libjailbreak/src/roothider/exec_patch.m
 
 printf 'validated artifact=%s bundle_id=%s version=%s\n' "$artifact" "$bundle_id" "$short_version"
