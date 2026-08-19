@@ -43,6 +43,8 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)respring;
 - (void)rebootUserspace;
 - (void)refreshJailbreakApps;
+- (BOOL)areJailbreakToolsHidden;
+- (void)setJailbreakToolsHidden:(BOOL)hidden;
 - (void)reboot;
 - (void)changeMobilePassword:(NSString *)newPassword;
 - (NSError*)updateEnvironment;
@@ -63,6 +65,7 @@ NS_ASSUME_NONNULL_BEGIN
 - (NSError *)finalizeBootstrap;
 - (NSError *)deleteBootstrap;
 - (NSError *)reinstallPackageManagers;
+- (NSError *)updateBootLogo;
 
 - (BOOL)isOtherJailbreakActived;
 

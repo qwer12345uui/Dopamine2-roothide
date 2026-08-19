@@ -10,6 +10,7 @@
 #import "DOModalBackAction.h"
 #import "DOGlobalAppearance.h"
 #import "DOThemeManager.h"
+#import "DOUIManager.h"
 
 @interface DONavigationController ()
 
@@ -29,6 +30,7 @@
 {
     [self setupBackground];
     [super viewDidLoad];
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(reloadBackgroundImage) name:DOWallpaperDidChangeNotification object:nil];
     [self setNavigationBarHidden:YES];
     [self pushViewController:(self.mainView = [[DOMainViewController alloc] init]) animated:NO];
     [self setDelegate:self];
@@ -41,7 +43,11 @@
     
     self.view.backgroundColor = [UIColor blackColor];
     self.backgroundImageView = [[UIImageView alloc] init];
-    self.backgroundImageView.image = [theme image];
+    UIImage *customWallpaper = nil;
+    if ([[DOPreferenceManager sharedManager] boolPreferenceValueForKey:@"customWallpaperEnabled" fallback:NO]) {
+        customWallpaper = [UIImage imageWithContentsOfFile:[DOUIManager sharedInstance].wallpaperPath];
+    }
+    self.backgroundImageView.image = customWallpaper ?: [theme image];
     self.backgroundImageView.contentMode = UIViewContentModeScaleAspectFill;
     self.backgroundImageView.translatesAutoresizingMaskIntoConstraints = NO;
     self.backgroundImageView.userInteractionEnabled = NO;
@@ -70,6 +76,16 @@
         [self.backAction.topAnchor constraintEqualToAnchor:self.view.topAnchor],
         [self.backAction.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor],
     ]];
+}
+
+- (void)reloadBackgroundImage
+{
+    DOTheme *theme = [[DOThemeManager sharedInstance] enabledTheme];
+    UIImage *customWallpaper = nil;
+    if ([[DOPreferenceManager sharedManager] boolPreferenceValueForKey:@"customWallpaperEnabled" fallback:NO]) {
+        customWallpaper = [UIImage imageWithContentsOfFile:[DOUIManager sharedInstance].wallpaperPath];
+    }
+    self.backgroundImageView.image = customWallpaper ?: [theme image];
 }
 
 - (void)setBackgroundDimmed:(BOOL)dimmed

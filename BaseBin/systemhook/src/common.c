@@ -82,6 +82,14 @@ static kSpawnConfig spawn_config_for_executable(const char* path, char *const ar
 		"/System/Library/PrivateFrameworks/DataAccess.framework/Support/dataaccessd",
 		"/System/Library/PrivateFrameworks/IDSBlastDoorSupport.framework/XPCServices/IDSBlastDoorService.xpc/IDSBlastDoorService",
 		"/System/Library/PrivateFrameworks/MessagesBlastDoorSupport.framework/XPCServices/MessagesBlastDoorService.xpc/MessagesBlastDoorService",
+
+		/* These services are already platform trusted. Keeping systemhook out of
+		 * installation transactions prevents fresh third-party apps from inheriting
+		 * dyld injection or suspended-child processing on iOS 15. */
+		"/usr/libexec/installd",
+		"/usr/libexec/appstored",
+		"/usr/libexec/storekitd",
+		"/usr/libexec/mobile_installation_proxy",
 	};
 	size_t blacklistCount = sizeof(processBlacklist) / sizeof(processBlacklist[0]);
 	for (size_t i = 0; i < blacklistCount; i++)

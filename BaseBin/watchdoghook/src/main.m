@@ -27,14 +27,20 @@ kern_return_t IOServiceOpen_hook(io_service_t service, task_port_t owningTask, u
 
 kern_return_t IOConnectCallStructMethod_hook(mach_port_t connection, uint32_t selector, const void *inputStruct, size_t inputStructCnt, void *outputStruct, size_t *outputStructCnt)
 {
-	if (connection == gIOWatchdogConnection) {
-		if (selector == 2) {
-			int r = jbclient_watchdog_intercept_userspace_panic((const char *)inputStruct);
-			if (r == 0) {
-				reboot3(RB2_USERREBOOT);
-			}
-			return r;
+	if (connection == gIOWatchdogConnection && selector == 2) {
+		/* The watchdog payload is expected to be a NUL-terminated panic message.
+		 * Never reinterpret arbitrary IOKit data as a C string; on malformed input
+		 * preserve the platform behavior instead of entering the recovery path. */
+		if (!inputStruct || inputStructCnt == 0 ||
+			memchr(inputStruct, '\0', inputStructCnt) == NULL) {
+			return IOConnectCallStructMethod_orig(connection, selector, inputStruct, inputStructCnt, outputStruct, outputStructCnt);
 		}
+
+		int r = jbclient_watchdog_intercept_userspace_panic((const char *)inputStruct);
+		if (r == 0) {
+			reboot3(RB2_USERREBOOT);
+		}
+		return r;
 	}
 	return IOConnectCallStructMethod_orig(connection, selector, inputStruct, inputStructCnt, outputStruct, outputStructCnt);
 }

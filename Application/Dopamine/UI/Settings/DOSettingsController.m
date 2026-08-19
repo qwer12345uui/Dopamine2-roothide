@@ -18,10 +18,11 @@
 #import "DOThemeManager.h"
 #import "DOSceneDelegate.h"
 #import "DOPSJetsamListItemsController.h"
+#import <Photos/Photos.h>
 
 
-@interface DOSettingsController ()
-
+@interface DOSettingsController () <UINavigationControllerDelegate, UIImagePickerControllerDelegate>
+@property (nonatomic) BOOL selectingBootLogo;
 @end
 
 @implementation DOSettingsController
@@ -280,7 +281,14 @@
                     [refreshAppsSpecifier setProperty:@"arrow.triangle.2.circlepath" forKey:@"image"];
                     [refreshAppsSpecifier setProperty:@"refreshJailbreakAppsPressed" forKey:@"action"];
                     [specifiers addObject:refreshAppsSpecifier];
-                    
+
+                    PSSpecifier *hideToolsSpecifier = [PSSpecifier preferenceSpecifierNamed:DOLocalizedString(@"Button_Hide_Jailbreak") target:self set:@selector(setJailbreakToolsHidden:specifier:) get:@selector(readJailbreakToolsHidden:) detail:nil cell:PSSwitchCell edit:nil];
+                    [hideToolsSpecifier setProperty:@YES forKey:@"enabled"];
+                    [hideToolsSpecifier setProperty:@"jailbreakToolsHidden" forKey:@"key"];
+                    [hideToolsSpecifier setProperty:@NO forKey:@"default"];
+                    [hideToolsSpecifier setProperty:DOLocalizedString(@"Hint_Hide_Jailbreak_Jailbroken") forKey:@"footerText"];
+                    [specifiers addObject:hideToolsSpecifier];
+
                     PSSpecifier *changeMobilePasswordSpecifier = [PSSpecifier emptyGroupSpecifier];
                     changeMobilePasswordSpecifier.target = self;
                     [changeMobilePasswordSpecifier setProperty:@"Button_Change_Mobile_Password" forKey:@"title"];
@@ -353,6 +361,32 @@
         [themeSpecifier setProperty:@"themeIdentifiers" forKey:@"valuesDataSource"];
         [themeSpecifier setProperty:@"themeNames" forKey:@"titlesDataSource"];
         [specifiers addObject:themeSpecifier];
+
+        PSSpecifier *wallpaperGroupSpecifier = [PSSpecifier emptyGroupSpecifier];
+        wallpaperGroupSpecifier.name = DOLocalizedString(@"Section_Customization");
+        [specifiers addObject:wallpaperGroupSpecifier];
+
+        PSSpecifier *customWallpaperEnabledSpecifier = [PSSpecifier preferenceSpecifierNamed:DOLocalizedString(@"Custom_Wallpaper") target:self set:@selector(setCustomWallpaperEnabled:specifier:) get:defGetter detail:nil cell:PSSwitchCell edit:nil];
+        [customWallpaperEnabledSpecifier setProperty:@YES forKey:@"enabled"];
+        [customWallpaperEnabledSpecifier setProperty:@"customWallpaperEnabled" forKey:@"key"];
+        [customWallpaperEnabledSpecifier setProperty:@NO forKey:@"default"];
+        [specifiers addObject:customWallpaperEnabledSpecifier];
+
+        PSSpecifier *selectWallpaperSpecifier = [PSSpecifier emptyGroupSpecifier];
+        selectWallpaperSpecifier.target = self;
+        [selectWallpaperSpecifier setProperty:DOLocalizedString(@"Select_Wallpaper") forKey:@"title"];
+        [selectWallpaperSpecifier setProperty:@"DOButtonCell" forKey:@"headerCellClass"];
+        [selectWallpaperSpecifier setProperty:@"photo" forKey:@"image"];
+        [selectWallpaperSpecifier setProperty:@"selectCustomWallpaperPressed" forKey:@"action"];
+        [specifiers addObject:selectWallpaperSpecifier];
+
+        PSSpecifier *selectBootLogoSpecifier = [PSSpecifier emptyGroupSpecifier];
+        selectBootLogoSpecifier.target = self;
+        [selectBootLogoSpecifier setProperty:DOLocalizedString(@"Select_Boot_Logo") forKey:@"title"];
+        [selectBootLogoSpecifier setProperty:@"DOButtonCell" forKey:@"headerCellClass"];
+        [selectBootLogoSpecifier setProperty:@"power" forKey:@"image"];
+        [selectBootLogoSpecifier setProperty:@"selectCustomBootLogoPressed" forKey:@"action"];
+        [specifiers addObject:selectBootLogoSpecifier];
         
         _specifiers = specifiers;
     }
@@ -420,6 +454,92 @@
         [userspaceRebootAlertController addAction:rebootLaterAction];
         [self presentViewController:userspaceRebootAlertController animated:YES completion:nil];
     }
+}
+
+- (void)setCustomWallpaperEnabled:(id)value specifier:(PSSpecifier *)specifier
+{
+    [self setPreferenceValue:value specifier:specifier];
+    [[NSNotificationCenter defaultCenter] postNotificationName:DOWallpaperDidChangeNotification object:nil];
+}
+
+- (void)selectCustomWallpaperPressed
+{
+    self.selectingBootLogo = NO;
+    [self selectCustomImagePressed];
+}
+
+- (void)selectCustomBootLogoPressed
+{
+    self.selectingBootLogo = YES;
+    [self selectCustomImagePressed];
+}
+
+- (void)selectCustomImagePressed
+{
+    PHAuthorizationStatus status = [PHPhotoLibrary authorizationStatus];
+    if (status == PHAuthorizationStatusNotDetermined) {
+        [PHPhotoLibrary requestAuthorization:^(PHAuthorizationStatus requestedStatus) {
+            if (requestedStatus == PHAuthorizationStatusAuthorized || requestedStatus == PHAuthorizationStatusLimited) {
+                dispatch_async(dispatch_get_main_queue(), ^{ [self selectCustomImagePressed]; });
+            }
+        }];
+        return;
+    }
+    if (status == PHAuthorizationStatusDenied || status == PHAuthorizationStatusRestricted) return;
+
+    UIImagePickerController *picker = [[UIImagePickerController alloc] init];
+    picker.delegate = self;
+    picker.sourceType = UIImagePickerControllerSourceTypePhotoLibrary;
+    [self presentViewController:picker animated:YES completion:nil];
+}
+
+- (void)imagePickerController:(UIImagePickerController *)picker didFinishPickingMediaWithInfo:(NSDictionary<NSString *, id> *)info
+{
+    UIImage *image = info[UIImagePickerControllerEditedImage] ?: info[UIImagePickerControllerOriginalImage];
+    if (image && image.size.width > 0 && image.size.height > 0) {
+        CGSize targetSize = image.size;
+        CGFloat longestEdge = MAX(targetSize.width, targetSize.height);
+        if (longestEdge > 2048.0) {
+            CGFloat scale = 2048.0 / longestEdge;
+            targetSize = CGSizeMake(targetSize.width * scale, targetSize.height * scale);
+        }
+        UIGraphicsBeginImageContextWithOptions(targetSize, NO, 1.0);
+        [image drawInRect:CGRectMake(0, 0, targetSize.width, targetSize.height)];
+        UIImage *normalizedImage = UIGraphicsGetImageFromCurrentImageContext();
+        UIGraphicsEndImageContext();
+        if (self.selectingBootLogo) {
+            NSData *data = UIImagePNGRepresentation(normalizedImage);
+            if (data.length > 0 && [data writeToFile:[DOUIManager sharedInstance].bootlogoPath atomically:YES] && [DOEnvironmentManager sharedManager].isJailbroken) {
+                [[DOEnvironmentManager sharedManager] updateBootLogo];
+            }
+        }
+        else {
+            NSData *data = UIImageJPEGRepresentation(normalizedImage, 0.88);
+            if (data.length > 0 && [data writeToFile:[DOUIManager sharedInstance].wallpaperPath atomically:YES]) {
+                [[NSNotificationCenter defaultCenter] postNotificationName:DOWallpaperDidChangeNotification object:nil];
+            }
+        }
+        self.selectingBootLogo = NO;
+    }
+    [picker dismissViewControllerAnimated:YES completion:nil];
+}
+
+- (void)imagePickerControllerDidCancel:(UIImagePickerController *)picker
+{
+    self.selectingBootLogo = NO;
+    [picker dismissViewControllerAnimated:YES completion:nil];
+}
+
+- (id)readJailbreakToolsHidden:(PSSpecifier *)specifier
+{
+    return @([[DOEnvironmentManager sharedManager] areJailbreakToolsHidden]);
+}
+
+- (void)setJailbreakToolsHidden:(id)value specifier:(PSSpecifier *)specifier
+{
+    BOOL hidden = ((NSNumber *)value).boolValue;
+    [self setPreferenceValue:value specifier:specifier];
+    [[DOEnvironmentManager sharedManager] setJailbreakToolsHidden:hidden];
 }
 
 - (id)readAppJITEnabled:(PSSpecifier *)specifier

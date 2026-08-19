@@ -6,7 +6,10 @@
 //
 
 #import "DOEnvironmentManager.h"
+#import "DOUIManager.h"
+#import "UIImage+JPEG2000.h"
 
+#import <unistd.h>
 #import <sys/mount.h>
 #import <sys/sysctl.h>
 #import <mach-o/dyld.h>
@@ -389,6 +392,28 @@ int reboot3(uint64_t flags, ...);
     }];
 }
 
+- (BOOL)areJailbreakToolsHidden
+{
+    return [[NSFileManager defaultManager] fileExistsAtPath:JBROOT_PATH(@"/.hide_jailbreak_tools")];
+}
+
+- (void)setJailbreakToolsHidden:(BOOL)hidden
+{
+    [self runAsRoot:^{
+        [self runUnsandboxed:^{
+            NSString *markerPath = JBROOT_PATH(@"/.hide_jailbreak_tools");
+            if (hidden) {
+                [[NSFileManager defaultManager] createFileAtPath:markerPath contents:[NSData data] attributes:nil];
+                [self unregisterJailbreakApps];
+            }
+            else {
+                [[NSFileManager defaultManager] removeItemAtPath:markerPath error:nil];
+                [self refreshJailbreakApps];
+            }
+        }];
+    }];
+}
+
 - (void)unregisterJailbreakApps
 {
     [self runAsRoot:^{
@@ -655,7 +680,12 @@ int reboot3(uint64_t flags, ...);
 
 - (NSError *)finalizeBootstrap
 {
-    return [_bootstrapper finalizeBootstrap];
+    NSError *error = [_bootstrapper finalizeBootstrap];
+    if (!error) {
+        NSError *bootLogoError = [self updateBootLogo];
+        if (bootLogoError) return bootLogoError;
+    }
+    return error;
 }
 
 - (NSError *)deleteBootstrap
@@ -693,5 +723,32 @@ int reboot3(uint64_t flags, ...);
     return error;
 }
 
+
+- (NSError *)updateBootLogo
+{
+    UIImage *bootLogoImage = [UIImage imageWithContentsOfFile:[DOUIManager sharedInstance].bootlogoPath];
+    const char *destinationPath = JBROOT_PATH("/basebin/bootlogo.jp2");
+
+    if (!bootLogoImage) {
+        [self runAsRoot:^{
+            [self runUnsandboxed:^{ unlink(destinationPath); }];
+        }];
+        return nil;
+    }
+
+    NSData *bootLogoData = [bootLogoImage jp2DataWithCompressionQuality:0.9];
+    if (bootLogoData.length == 0) {
+        return [NSError errorWithDomain:@"com.roothide.Dopamine.bootlogo" code:1 userInfo:@{NSLocalizedDescriptionKey: @"Unable to encode custom boot logo"}];
+    }
+
+    __block NSError *writeError = nil;
+    NSString *destination = [NSString stringWithUTF8String:destinationPath];
+    [self runAsRoot:^{
+        [self runUnsandboxed:^{
+            [bootLogoData writeToFile:destination options:NSDataWritingAtomic error:&writeError];
+        }];
+    }];
+    return writeError;
+}
 
 @end

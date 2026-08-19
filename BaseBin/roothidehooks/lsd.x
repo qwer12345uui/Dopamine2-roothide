@@ -186,20 +186,49 @@ NSURL* new_LSGetInboxURLForBundleIdentifier(NSString* bundleIdentifier)
 }
 
 int (*orig_LSServer_RebuildApplicationDatabases)()=NULL;
+
+/*
+ * `uicache -a` asks LaunchServices to rebuild its databases.  Running it from
+ * this callback therefore creates a feedback loop.  iOS 15 arm64e is
+ * particularly sensitive after an App Store install/update, when lsd and
+ * SpringBoard are already reconciling the new bundle.  Keep the historical
+ * automatic refresh available on newer systems, but require an explicit
+ * marker on the affected platform.  The in-app manual refresh remains
+ * unchanged.
+ */
+static BOOL shouldAutoUICacheAfterDatabaseRebuild(void)
+{
+	if (access(jbroot("/.disable_auto_uicache"), F_OK) == 0) return NO;
+
+#ifdef __arm64e__
+	if (@available(iOS 16.0, *)) return YES;
+	return access(jbroot("/.enable_auto_uicache_ios15"), F_OK) == 0;
+#else
+	return YES;
+#endif
+}
+
 int new_LSServer_RebuildApplicationDatabases()
 {
 	int r = orig_LSServer_RebuildApplicationDatabases();
+	if (!shouldAutoUICacheAfterDatabaseRebuild()) return r;
 
-	if(access(jbroot("/.disable_auto_uicache"), F_OK) == 0) return r;
-
-	dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-		// Ensure jailbreak apps are readded to icon cache after the system reloads it
-		// A bit hacky, but works
-		char* const args[] = {"/usr/bin/uicache", "-a", NULL};
-		const char *uicachePath = jbroot(args[0]);
-		if (access(uicachePath, F_OK) == 0) {
-			posix_spawn(NULL, uicachePath, NULL, NULL, args, environ);
-		}
+	/* Coalesce rebuild storms: one lsd process can queue at most one refresh. */
+	static dispatch_once_t autoUICacheOnce = 0;
+	dispatch_once(&autoUICacheOnce, ^{
+		dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+			@autoreleasepool {
+				char* const args[] = {"/usr/bin/uicache", "-a", NULL};
+				const char *uicachePath = jbroot(args[0]);
+				if (access(uicachePath, F_OK) == 0) {
+					pid_t pid = 0;
+					int spawnError = posix_spawn(&pid, uicachePath, NULL, NULL, args, environ);
+					if (spawnError != 0) {
+						NSLog(@"automatic uicache spawn failed: %d", spawnError);
+					}
+				}
+			}
+		});
 	});
 
 	return r;

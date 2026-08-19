@@ -116,3 +116,8 @@
 "Status_Title_Select_Package_Managers" = "Select Package Manager(s)";
 "Select_Package_Managers_Install_Message" = "If you are unsure which one to select, select Sileo";
 "Continue" = "Continue";
+
+// Customization
+"Custom_Wallpaper" = "Custom Wallpaper";
+"Select_Wallpaper" = "Select Wallpaper";
+"Select_Boot_Logo" = "Select Boot Logo";

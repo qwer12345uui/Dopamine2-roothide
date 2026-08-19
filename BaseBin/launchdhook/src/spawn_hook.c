@@ -1,5 +1,6 @@
 #include <spawn.h>
 #include "../systemhook/src/common.h"
+#include "../systemhook/src/envbuf.h"
 #include "boomerang.h"
 #include "crashreporter.h"
 #include "update.h"
@@ -21,6 +22,31 @@ extern bool gFirstLoad;
 void early_boot_done(void)
 {
 	gInEarlyBoot = false;
+}
+
+/* App Store executables use this stable container shape.  Avoid realpath here:
+ * immediately after installation the filesystem view may still be changing. */
+static bool isAppStoreBundlePath(const char *path)
+{
+	if (!path) return false;
+	return (string_has_prefix(path, "/private/var/containers/Bundle/Application/") ||
+			string_has_prefix(path, "/var/containers/Bundle/Application/")) &&
+		strstr(path, ".app/") != NULL;
+}
+
+/* On iOS 15 arm64e, app-install prewarm processes can race dyld shared-cache
+ * work. They are disposable and do not need RootHide injection; a subsequent
+ * foreground launch still travels through the normal hook path. */
+static bool shouldBypassInjectionForIOS15AppPrewarm(const char *path, char *const envp[])
+{
+#ifdef __arm64e__
+	if (!__builtin_available(iOS 16.0, *)) {
+		return isAppStoreBundlePath(path) &&
+			(envbuf_getenv((const char **)envp, "ActivePrewarm") ||
+			 envbuf_getenv((const char **)envp, "DYLD_USE_CLOSURES"));
+	}
+#endif
+	return false;
 }
 
 /*
@@ -247,6 +273,11 @@ int __posix_spawn_hook(pid_t *restrict pidp, const char *restrict path, struct _
 
 	if(gFirstLoad) {
 		//we should not enable system-wide injection until the jailbreak is finalized (userspace reboot).
+		return __posix_spawn_orig_wrapper(pidp, path, desc, argv, envp);
+	}
+
+	if (shouldBypassInjectionForIOS15AppPrewarm(path, envp)) {
+		JBLogDebug("skip injection for iOS 15 app prewarm: %s", path);
 		return __posix_spawn_orig_wrapper(pidp, path, desc, argv, envp);
 	}
 

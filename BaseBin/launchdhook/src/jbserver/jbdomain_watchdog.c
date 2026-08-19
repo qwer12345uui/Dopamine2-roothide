@@ -24,8 +24,18 @@ static int watchdog_intercept_userspace_panic(const char *panicMessage)
 	}
 
 	setenv("WATCHDOG_PANIC_MESSAGE", panicMessage, 1);
+
+	/* This handler runs inside launchd. A failed marker write must not turn
+	 * a recoverable watchdog event into an initproc failure. */
 	FILE *touchFile = fopen(JBROOT_PATH("/basebin/.safe_mode"), "w");
-	fclose(touchFile);
+	if (!touchFile) {
+		JBLogError("Failed to create watchdog safe-mode marker");
+		return -1;
+	}
+	if (fclose(touchFile) != 0) {
+		JBLogError("Failed to finalize watchdog safe-mode marker");
+		return -1;
+	}
 
 	return 0;
 }

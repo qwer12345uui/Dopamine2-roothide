@@ -5,6 +5,26 @@
 #import <Foundation/Foundation.h>
 #import <libjailbreak/libjailbreak.h>
 #import <sys/mount.h>
+#include <unistd.h>
+
+/*
+ * A full uicache rebuild is unnecessary on every iOS 15 arm64e jailbreak
+ * startup and can overlap the system's post-install reconciliation. Keep the
+ * manual refresh action intact, but require an explicit diagnostic marker to
+ * restore the historical automatic behavior on the affected platform.
+ */
+static bool shouldRefreshJailbrokenAppsAtStartup(void)
+{
+	if (access(JBROOT_PATH("/.disable_startup_uicache"), F_OK) == 0) return false;
+
+#ifdef __arm64e__
+	if (!__builtin_available(iOS 16.0, *)) {
+		return access(JBROOT_PATH("/.enable_startup_uicache_ios15"), F_OK) == 0;
+	}
+#endif
+
+	return true;
+}
 
 SInt32 CFUserNotificationDisplayAlert(CFTimeInterval timeout, CFOptionFlags flags, CFURLRef iconURL, CFURLRef soundURL, CFURLRef localizationURL, CFStringRef alertHeader, CFStringRef alertMessage, CFStringRef defaultButtonTitle, CFStringRef alternateButtonTitle, CFStringRef otherButtonTitle, CFOptionFlags *responseFlags) API_AVAILABLE(ios(3.0));
 
@@ -134,9 +154,15 @@ int jbctl_handle_internal(const char *command, int argc, char* argv[])
 		}
 
 		//only bootstrap after launchdhook and systemhook available
-		exec_cmd(JBROOT_PATH("/usr/bin/launchctl"), "bootstrap", "system", "/Library/LaunchDaemons", NULL);
+			exec_cmd(JBROOT_PATH("/usr/bin/launchctl"), "bootstrap", "system", "/Library/LaunchDaemons", NULL);
 
-		exec_cmd(JBROOT_PATH("/usr/bin/uicache"), "-a", NULL);
+			if (shouldRefreshJailbrokenAppsAtStartup()) {
+				JBLogDebug("jbctl startup: refreshing jailbroken apps ...");
+				exec_cmd(JBROOT_PATH("/usr/bin/uicache"), "-a", NULL);
+			}
+			else {
+				JBLogDebug("jbctl startup: skip automatic uicache on iOS 15");
+			}
 	}
 	else if (!strcmp(command, "install_pkg")) {
 		if (argc > 1) {
